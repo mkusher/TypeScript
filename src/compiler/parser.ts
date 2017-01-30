@@ -5858,10 +5858,10 @@ namespace ts {
                     }
 
                     const checkDirectiveRegEx = /^\/\/\s*@check\s*/gim;
-                    hasCheckDirective = !!checkDirectiveRegEx.exec(comment);
+                    hasCheckDirective = hasCheckDirective || !!checkDirectiveRegEx.exec(comment);
 
                     const typesDirectiveRegEx = /^\/\/\s*@types\s*/gim;
-                    hasTypesDirective = !!typesDirectiveRegEx.exec(comment);
+                    hasTypesDirective = hasTypesDirective || !!typesDirectiveRegEx.exec(comment);
                 }
             }
 
