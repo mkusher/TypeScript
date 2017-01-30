@@ -194,8 +194,9 @@ namespace ts {
             }
 
             const child = children[0];
-
-            return child.kind < SyntaxKind.FirstNode ? child : child.getFirstToken(sourceFile);
+            return child.kind < SyntaxKind.FirstNode || SyntaxKind.FirstJSDocNode <= child.kind && child.kind <= SyntaxKind.LastJSDocNode ?
+                child :
+                child.getFirstToken(sourceFile);
         }
 
         public getLastToken(sourceFile?: SourceFile): Node {
@@ -206,7 +207,9 @@ namespace ts {
                 return undefined;
             }
 
-            return child.kind < SyntaxKind.FirstNode ? child : child.getLastToken(sourceFile);
+            return child.kind < SyntaxKind.FirstNode || SyntaxKind.FirstJSDocNode <= child.kind && child.kind <= SyntaxKind.LastJSDocNode ?
+                child :
+                child.getLastToken(sourceFile);
         }
     }
 
@@ -379,7 +382,7 @@ namespace ts {
         getNumberIndexType(): Type {
             return this.checker.getIndexTypeOfType(this, IndexKind.Number);
         }
-        getBaseTypes(): ObjectType[] {
+        getBaseTypes(): BaseType[] {
             return this.flags & TypeFlags.Object && this.objectFlags & (ObjectFlags.Class | ObjectFlags.Interface)
                 ? this.checker.getBaseTypes(<InterfaceType><Type>this)
                 : undefined;
@@ -520,7 +523,7 @@ namespace ts {
         }
 
         private computeNamedDeclarations(): Map<Declaration[]> {
-            const result = createMap<Declaration[]>();
+            const result = createMultiMap<Declaration>();
 
             forEachChild(this, visit);
 
@@ -529,12 +532,16 @@ namespace ts {
             function addDeclaration(declaration: Declaration) {
                 const name = getDeclarationName(declaration);
                 if (name) {
-                    multiMapAdd(result, name, declaration);
+                    result.add(name, declaration);
                 }
             }
 
             function getDeclarations(name: string) {
-                return result[name] || (result[name] = []);
+                let declarations = result.get(name);
+                if (!declarations) {
+                    result.set(name, declarations = []);
+                }
+                return declarations;
             }
 
             function getDeclarationName(declaration: Declaration) {
@@ -1958,7 +1965,7 @@ namespace ts {
         function walk(node: Node) {
             switch (node.kind) {
                 case SyntaxKind.Identifier:
-                    nameTable[(<Identifier>node).text] = nameTable[(<Identifier>node).text] === undefined ? node.pos : -1;
+                    setNameTable((<Identifier>node).text, node);
                     break;
                 case SyntaxKind.StringLiteral:
                 case SyntaxKind.NumericLiteral:
@@ -1970,8 +1977,7 @@ namespace ts {
                         node.parent.kind === SyntaxKind.ExternalModuleReference ||
                         isArgumentOfElementAccessExpression(node) ||
                         isLiteralComputedPropertyDeclarationName(node)) {
-
-                        nameTable[(<LiteralExpression>node).text] = nameTable[(<LiteralExpression>node).text] === undefined ? node.pos : -1;
+                        setNameTable((<LiteralExpression>node).text, node);
                     }
                     break;
                 default:
@@ -1982,6 +1988,10 @@ namespace ts {
                         }
                     }
             }
+        }
+
+        function setNameTable(text: string, node: ts.Node): void {
+            nameTable.set(text, nameTable.get(text) === undefined ? node.pos : -1);
         }
     }
 

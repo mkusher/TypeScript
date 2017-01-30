@@ -265,6 +265,7 @@ namespace ts {
                             return "export=";
                         case SpecialPropertyAssignmentKind.ExportsProperty:
                         case SpecialPropertyAssignmentKind.ThisProperty:
+                        case SpecialPropertyAssignmentKind.Property:
                             // exports.x = ... or this.y = ...
                             return ((node as BinaryExpression).left as PropertyAccessExpression).name.text;
                         case SpecialPropertyAssignmentKind.PrototypeProperty:
@@ -349,17 +350,20 @@ namespace ts {
                 // Otherwise, we'll be merging into a compatible existing symbol (for example when
                 // you have multiple 'vars' with the same name in the same container).  In this case
                 // just add this node into the declarations list of the symbol.
-                symbol = symbolTable[name] || (symbolTable[name] = createSymbol(SymbolFlags.None, name));
+                symbol = symbolTable.get(name);
+                if (!symbol) {
+                    symbolTable.set(name, symbol = createSymbol(SymbolFlags.None, name));
+                }
 
                 if (name && (includes & SymbolFlags.Classifiable)) {
-                    classifiableNames[name] = name;
+                    classifiableNames.set(name, name);
                 }
 
                 if (symbol.flags & excludes) {
                     if (symbol.isReplaceableByMethod) {
                         // Javascript constructor-declared symbols can be discarded in favor of
                         // prototype symbols like methods.
-                        symbol = symbolTable[name] = createSymbol(SymbolFlags.None, name);
+                        symbolTable.set(name, symbol = createSymbol(SymbolFlags.None, name));
                     }
                     else {
                         if (node.name) {
@@ -1570,7 +1574,7 @@ namespace ts {
             const typeLiteralSymbol = createSymbol(SymbolFlags.TypeLiteral, "__type");
             addDeclarationToSymbol(typeLiteralSymbol, node, SymbolFlags.TypeLiteral);
             typeLiteralSymbol.members = createMap<Symbol>();
-            typeLiteralSymbol.members[symbol.name] = symbol;
+            typeLiteralSymbol.members.set(symbol.name, symbol);
         }
 
         function bindObjectLiteralExpression(node: ObjectLiteralExpression) {
@@ -1601,9 +1605,9 @@ namespace ts {
                         ? ElementKind.Property
                         : ElementKind.Accessor;
 
-                    const existingKind = seen[identifier.text];
+                    const existingKind = seen.get(identifier.text);
                     if (!existingKind) {
-                        seen[identifier.text] = currentKind;
+                        seen.set(identifier.text, currentKind);
                         continue;
                     }
 
@@ -1918,6 +1922,9 @@ namespace ts {
                             case SpecialPropertyAssignmentKind.ThisProperty:
                                 bindThisPropertyAssignment(<BinaryExpression>node);
                                 break;
+                            case SpecialPropertyAssignmentKind.Property:
+                                bindPropertyAssignment(<BinaryExpression>node);
+                                break;
                             case SpecialPropertyAssignmentKind.None:
                                 // Nothing to do
                                 break;
@@ -2208,8 +2215,12 @@ namespace ts {
             constructorFunction.parent = classPrototype;
             classPrototype.parent = leftSideOfAssignment;
 
-            const funcSymbol = container.locals[constructorFunction.text];
-            if (!funcSymbol || !(funcSymbol.flags & SymbolFlags.Function || isDeclarationOfFunctionExpression(funcSymbol))) {
+            let funcSymbol = container.locals.get(constructorFunction.text);
+            if (isDeclarationOfFunctionOrClassExpression(funcSymbol)) {
+                funcSymbol = (funcSymbol.valueDeclaration as VariableDeclaration).initializer.symbol;
+            }
+
+            if (!funcSymbol || !(funcSymbol.flags & (SymbolFlags.Function | SymbolFlags.Class))) {
                 return;
             }
 
@@ -2220,6 +2231,36 @@ namespace ts {
 
             // Declare the method/property
             declareSymbol(funcSymbol.members, funcSymbol, leftSideOfAssignment, SymbolFlags.Property, SymbolFlags.PropertyExcludes);
+        }
+
+        function bindPropertyAssignment(node: BinaryExpression) {
+            // We saw a node of the form 'x.y = z'. Declare a 'member' y on x if x was a function.
+
+            // Look up the function in the local scope, since prototype assignments should
+            // follow the function declaration
+            const leftSideOfAssignment = node.left as PropertyAccessExpression;
+            const target = leftSideOfAssignment.expression as Identifier;
+
+            // Fix up parent pointers since we're going to use these nodes before we bind into them
+            leftSideOfAssignment.parent = node;
+            target.parent = leftSideOfAssignment;
+
+            let funcSymbol = container.locals.get(target.text);
+            if (isDeclarationOfFunctionOrClassExpression(funcSymbol)) {
+                funcSymbol = (funcSymbol.valueDeclaration as VariableDeclaration).initializer.symbol;
+            }
+
+            if (!funcSymbol || !(funcSymbol.flags & (SymbolFlags.Function | SymbolFlags.Class))) {
+                return;
+            }
+
+            // Set up the members collection if it doesn't exist already
+            if (!funcSymbol.exports) {
+                funcSymbol.exports = createMap<Symbol>();
+            }
+
+            // Declare the method/property
+            declareSymbol(funcSymbol.exports, funcSymbol, leftSideOfAssignment, SymbolFlags.Property, SymbolFlags.PropertyExcludes);
         }
 
         function bindCallExpression(node: CallExpression) {
@@ -2239,7 +2280,7 @@ namespace ts {
                 bindAnonymousDeclaration(node, SymbolFlags.Class, bindingName);
                 // Add name of class expression into the map for semantic classifier
                 if (node.name) {
-                    classifiableNames[node.name.text] = node.name.text;
+                    classifiableNames.set(node.name.text, node.name.text);
                 }
             }
 
@@ -2255,14 +2296,14 @@ namespace ts {
             // module might have an exported variable called 'prototype'.  We can't allow that as
             // that would clash with the built-in 'prototype' for the class.
             const prototypeSymbol = createSymbol(SymbolFlags.Property | SymbolFlags.Prototype, "prototype");
-            if (symbol.exports[prototypeSymbol.name]) {
+            const symbolExport = symbol.exports.get(prototypeSymbol.name);
+            if (symbolExport) {
                 if (node.name) {
                     node.name.parent = node;
                 }
-                file.bindDiagnostics.push(createDiagnosticForNode(symbol.exports[prototypeSymbol.name].declarations[0],
-                    Diagnostics.Duplicate_identifier_0, prototypeSymbol.name));
+                file.bindDiagnostics.push(createDiagnosticForNode(symbolExport.declarations[0], Diagnostics.Duplicate_identifier_0, prototypeSymbol.name));
             }
-            symbol.exports[prototypeSymbol.name] = prototypeSymbol;
+            symbol.exports.set(prototypeSymbol.name, prototypeSymbol);
             prototypeSymbol.parent = symbol;
         }
 
