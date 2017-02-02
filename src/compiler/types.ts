@@ -2085,7 +2085,7 @@
 
     export interface PreFinallyFlow extends FlowNode {
         antecedent: FlowNode;
-        lock?: FlowLock;
+        lock: FlowLock;
     }
 
     export interface FlowNode {

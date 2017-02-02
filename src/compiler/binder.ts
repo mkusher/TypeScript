@@ -1046,7 +1046,10 @@ namespace ts {
                 // in finally flow is combined from pre-try/flow from try/flow from catch
                 // pre-flow is necessary to make sure that finally is reachable even if finally flows in both try and finally blocks are unreachable
 
-                let preFinallyFlow: PreFinallyFlow = { flags: FlowFlags.PreFinally, antecedent: preTryFlow };
+                // also for finally blocks we inject two extra edges into the flow graph.
+                // first -> edge that connects pre-try flow with the label at the beginning of the finally block
+                // second -> edge that represents post-finally flow.
+                const preFinallyFlow: PreFinallyFlow = { flags: FlowFlags.PreFinally, antecedent: preTryFlow, lock: {} };
                 addAntecedent(preFinallyLabel, preFinallyFlow);
 
                 currentFlow = finishFlowLabel(preFinallyLabel);
