@@ -9814,12 +9814,14 @@ namespace ts {
                     }
                     let type: FlowType;
                     if (flow.flags & FlowFlags.AfterFinally) {
-                        // block flow edge: finally -> pre-try (for larger explanation check comment in binder.ts::bindTryStatement 
+                        // block flow edge: finally -> pre-try (for larger explanation check comment in binder.ts - bindTryStatement 
                         (<AfterFinallyFlow>flow).locked = true;
                         type = getTypeAtFlowNode((<AfterFinallyFlow>flow).antecedent);
                         (<AfterFinallyFlow>flow).locked = false;
                     }
                     else if (flow.flags & FlowFlags.PreFinally) {
+                        // locked pre-finally flows are filtered out in getTypeAtFlowBranchLabel
+                        // so here just redirect to antecedent
                         flow = (<PreFinallyFlow>flow).antecedent;
                         continue;
                     }
