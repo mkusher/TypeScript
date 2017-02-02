@@ -11,7 +11,7 @@ try {
   closeFile()
 }
 
-result // error here
+result // should not error here
 
 //// [flowAfterFinally1.js]
 var result;
@@ -22,4 +22,4 @@ try {
 finally {
     closeFile();
 }
-result; // error here
+result; // should not error here

@@ -24,6 +24,6 @@ try {
 >closeFile : Symbol(closeFile, Decl(flowAfterFinally1.ts, 0, 33))
 }
 
-result // error here
+result // should not error here
 >result : Symbol(result, Decl(flowAfterFinally1.ts, 4, 3))
 

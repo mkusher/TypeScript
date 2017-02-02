@@ -28,6 +28,6 @@ try {
 >closeFile : () => void
 }
 
-result // error here
+result // should not error here
 >result : {}
 

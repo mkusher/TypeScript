@@ -11,4 +11,4 @@ try {
   closeFile()
 }
 
-result // error here
+result // should not error here
