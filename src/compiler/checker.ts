@@ -9813,7 +9813,16 @@ namespace ts {
                         }
                     }
                     let type: FlowType;
-                    if (flow.flags & FlowFlags.Assignment) {
+                    if (flow.flags & FlowFlags.AfterFinally) {
+                        (<AfterFinallyFlow>flow).locked = true;
+                        type = getTypeAtFlowNode((<AfterFinallyFlow>flow).antecedent);
+                        (<AfterFinallyFlow>flow).locked = false;
+                    }
+                    else if (flow.flags & FlowFlags.PreFinally) {
+                        flow = (<PreFinallyFlow>flow).antecedent;
+                        continue;
+                    }
+                    else if (flow.flags & FlowFlags.Assignment) {
                         type = getTypeAtFlowAssignment(<FlowAssignment>flow);
                         if (!type) {
                             flow = (<FlowAssignment>flow).antecedent;
@@ -9969,6 +9978,9 @@ namespace ts {
                 let subtypeReduction = false;
                 let seenIncomplete = false;
                 for (const antecedent of flow.antecedents) {
+                    if (antecedent.flags & FlowFlags.PreFinally && (<PreFinallyFlow>antecedent).lock && (<PreFinallyFlow>antecedent).lock.locked) {
+                        continue;
+                    }
                     const flowType = getTypeAtFlowNode(antecedent);
                     const type = getTypeFromFlowType(flowType);
                     // If the type at a particular antecedent path is the declared type and the
