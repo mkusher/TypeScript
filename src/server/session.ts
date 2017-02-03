@@ -204,39 +204,54 @@ namespace ts.server {
         return `Content-Length: ${1 + len}\r\n\r\n${json}${newLine}`;
     }
 
-    class InFlightOperation {
+    class DelayedOperation {
         private timerHandle: any;
         private immediateId: any;
+        private completed = false;
 
-        constructor(private readonly session: Session, private requestId: number) {
+        constructor(private readonly session: Session, private readonly requestId: number) {
         }
 
-        public complete() {
-            if (this.requestId !== undefined) {
-                this.session.sendRequestCompletedEvent(this.requestId);
-                this.requestId = undefined;
+        public complete() {``
+            if (!this.completed) {
+                if (this.requestId) {
+                    this.session.sendRequestCompletedEvent(this.requestId);
+                }
+                this.completed = true;
             }
             this.setTimerHandle(undefined);
             this.setImmediateId(undefined);
         }
 
         public immediate(action: () => void) {
+            Debug.assert(this.requestId === this.session.getCurrentRequestId(), "immediate: incorrect request id")
             this.setImmediateId(this.session.getServerHost().setImmediate(() => {
                 this.immediateId = undefined;
-                this.executeAction(action);
+                this.session.executeWithRequestId(this.requestId, () => this.executeAction(action));
             }));
         }
 
         public delay(timeout: number, action: () => void) {
+            Debug.assert(this.requestId === this.session.getCurrentRequestId(), "delay: incorrect request id")
             this.setTimerHandle(this.session.getServerHost().setTimeout(() => {
                 this.timerHandle = undefined;
-                this.executeAction(action);
+                this.session.executeWithRequestId(this.requestId, () => this.executeAction(action));
             }, timeout));
         }
 
         public executeAction(action: () => void) {
-            action();
-            if (!this.hasPendingWork()) {
+            let stop = false;
+            try {
+                action();
+            }
+            catch (e) {
+                stop = true;
+                // ignore cancellation request
+                if (!(e instanceof OperationCanceledException)) {
+                    this.session.logError(e, `delayed processing of request ${this.requestId}`);
+                }
+            }
+            if (stop || !this.hasPendingWork()) {
                 this.complete();
             }
         }
@@ -266,7 +281,7 @@ namespace ts.server {
         private changeSeq = 0;
 
         private currentRequestId: number;
-        private inFlightErrorCheck: InFlightOperation;
+        private currentErrorCheck: DelayedOperation;
 
         private eventHander: ProjectServiceEventHandler;
 
@@ -280,11 +295,6 @@ namespace ts.server {
             protected logger: Logger,
             protected readonly canUseEvents: boolean,
             eventHandler?: ProjectServiceEventHandler) {
-
-            if (cancellationToken !== nullCancellationToken) {
-                host.setImmediate = this.wrapDeferredCall(this.host, this.host.setImmediate);
-                host.setTimeout = this.wrapDeferredCall(this.host, this.host.setTimeout);
-            }
 
             this.eventHander = canUseEvents
                 ? eventHandler || (event => this.defaultEventHandler(event))
@@ -303,31 +313,13 @@ namespace ts.server {
         }
 
         public sendRequestCompletedEvent(requestId: number): void {
-            this.event(<protocol.RequestCompletedEventBody>{ request_seq: requestId }, <protocol.EventTypes.RequestCompleted>"requestCompleted");
-        }
-
-        private wrapDeferredCall<T extends (cb: (...args: any[]) => void, ...rest: any[]) => any>(thisArg: any, originalCall: T): T {
-            return <T>((cb, ...rest) => {
-                const capturedRequestId = this.currentRequestId;
-                const wrapped: typeof cb = a => {
-                    Debug.assert(this.currentRequestId === undefined, `Request ${this.currentRequestId} is in-flight`);
-                    // restore captured request id
-                    try {
-                        if (capturedRequestId !== undefined) {
-                            this.setCurrentRequest(capturedRequestId);
-                        }
-                        cb(a);
-                    }
-                    finally {
-                        if (capturedRequestId !== undefined) {
-                            this.resetCurrentRequest(capturedRequestId);
-                        }
-                    }
-                };
-                // substitute callback with wrapper function that will restore the request id
-                // before invoking the original callback
-                return originalCall.call(thisArg, wrapped, rest);
-            });
+            const event: protocol.RequestCompletedEvent = {
+                seq: 0,
+                type: "event",
+                event: "requestCompleted",
+                body: { request_seq: requestId }
+            };
+            this.send(event);
         }
 
         private defaultEventHandler(event: ProjectServiceEvent) {
@@ -455,14 +447,14 @@ namespace ts.server {
                 followMs = ms;
             }
 
-            if (this.inFlightErrorCheck) {
+            if (this.currentErrorCheck) {
                 // mark current in flight operation as completed
-                this.inFlightErrorCheck.complete();
+                this.currentErrorCheck.complete();
             }
-            const inFlightErrorCheck = new InFlightOperation(this, this.currentRequestId);
-            this.inFlightErrorCheck = inFlightErrorCheck;
+            const errorCheck = new DelayedOperation(this, this.currentRequestId);
+            this.currentErrorCheck = errorCheck;
 
-            this.inFlightErrorCheck.executeAction(() => {
+            this.currentErrorCheck.executeAction(() => {
                 let index = 0;
                 const checkOne = () => {
                     if (matchSeq(seq)) {
@@ -470,17 +462,17 @@ namespace ts.server {
                         index++;
                         if (checkSpec.project.containsFile(checkSpec.fileName, requireOpen)) {
                             this.syntacticCheck(checkSpec.fileName, checkSpec.project);
-                            inFlightErrorCheck.immediate(() => {
+                            errorCheck.immediate(() => {
                                 this.semanticCheck(checkSpec.fileName, checkSpec.project);
                                 if (checkList.length > index) {
-                                    inFlightErrorCheck.delay(followMs, checkOne);
+                                    errorCheck.delay(followMs, checkOne);
                                 }
                             });
                         }
                     }
                 };
                 if ((checkList.length > index) && (matchSeq(seq))) {
-                    inFlightErrorCheck.delay(ms, checkOne);
+                    errorCheck.delay(ms, checkOne);
                 }
             });
         }
@@ -1773,16 +1765,20 @@ namespace ts.server {
             this.cancellationToken.resetRequest(requestId);
         }
 
+        public executeWithRequestId<T>(requestId: number, f: () => T) {
+            try {
+                this.setCurrentRequest(requestId);
+                return f();
+            }
+            finally {
+                this.resetCurrentRequest(requestId);
+            }
+        }
+
         public executeCommand(request: protocol.Request): { response?: any, responseRequired?: boolean } {
             const handler = this.handlers.get(request.command);
             if (handler) {
-                try {
-                    this.setCurrentRequest(request.seq);
-                    return handler(request);
-                }
-                finally {
-                    this.resetCurrentRequest(request.seq);
-                }
+                return this.executeWithRequestId(request.seq, () => handler(request));
             }
             else {
                 this.logger.msg(`Unrecognized JSON command: ${JSON.stringify(request)}`, Msg.Err);

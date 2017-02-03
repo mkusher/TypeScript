@@ -97,10 +97,6 @@ namespace ts.server.protocol {
         export type GetSupportedCodeFixes = "getSupportedCodeFixes";
     }
 
-    export namespace EventTypes {
-        export type RequestCompleted = "requestCompleted";
-    }
-
     /**
       * A TypeScript Server message
       */
@@ -1765,10 +1761,13 @@ namespace ts.server.protocol {
         arguments: GeterrRequestArgs;
     }
 
+    export type RequestCompletedEventName = "requestCompleted";
+
     /**
      * Event that is sent when server have finished processing request with specified id.
      */
     export interface RequestCompletedEvent extends Event {
+        event: RequestCompletedEventName;
         body: RequestCompletedEventBody;
     }
 
