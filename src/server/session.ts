@@ -204,39 +204,69 @@ namespace ts.server {
         return `Content-Length: ${1 + len}\r\n\r\n${json}${newLine}`;
     }
 
-    class ScheduledOperationHandle {
-        private handle: any;
-        private requestIdForScheduledOperation: number;
-        constructor(private readonly closeAction: (handle: any) => void, private readonly session: Session) {
+    class InFlightOperation {
+        private timerHandle: any;
+        private immediateId: any;
+
+        constructor(private readonly session: Session, private requestId: number) {
         }
 
-        public attach(newHandle: any) {
-            this.cancelPendingOperation();
-            this.handle = newHandle;
-            this.requestIdForScheduledOperation = this.session.getCurrentRequestId();
-        }
-
-        public cancelPendingOperation() {
-            if (this.handle !== undefined) {
-                this.closeAction(this.handle);
-                this.handle = undefined;
-                if (this.requestIdForScheduledOperation !== undefined) {
-                    this.session.sendRequestCompletedEvent(this.requestIdForScheduledOperation);
-                }
+        public complete() {
+            if (this.requestId !== undefined) {
+                this.session.sendRequestCompletedEvent(this.requestId);
+                this.requestId = undefined;
             }
+            this.setTimerHandle(undefined);
+            this.setImmediateId(undefined);
+        }
+
+        public immediate(action: () => void) {
+            this.setImmediateId(this.session.getServerHost().setImmediate(() => {
+                this.immediateId = undefined;
+                this.executeAction(action);
+            }));
+        }
+
+        public delay(timeout: number, action: () => void) {
+            this.setTimerHandle(this.session.getServerHost().setTimeout(() => {
+                this.timerHandle = undefined;
+                this.executeAction(action);
+            }, timeout));
+        }
+
+        public executeAction(action: () => void) {
+            action();
+            if (!this.hasPendingWork()) {
+                this.complete();
+            }
+        }
+
+        private setTimerHandle(timerHandle: any) {;
+            if (this.timerHandle !== undefined) {
+                this.session.getServerHost().clearTimeout(this.timerHandle);
+            }
+            this.timerHandle = timerHandle;
+        }
+
+        private setImmediateId(immediateId: number) {
+            if (this.immediateId !== undefined) {
+                this.session.getServerHost().clearImmediate(this.immediateId);
+            }
+            this.immediateId = immediateId;
+        }
+
+        private hasPendingWork() {
+            return !!this.timerHandle || !!this.immediateId;
         }
     }
 
     export class Session implements EventSender {
         private readonly gcTimer: GcTimer;
         protected projectService: ProjectService;
-        //private errorTimer: any; /*NodeJS.Timer | number*/
-        //private immediateId: any;
         private changeSeq = 0;
-        private currentRequestId: number;
 
-        private readonly setImmediateOperationHandle: ScheduledOperationHandle;
-        private readonly setTimeoutOperationHandle: ScheduledOperationHandle;
+        private currentRequestId: number;
+        private inFlightErrorCheck: InFlightOperation;
 
         private eventHander: ProjectServiceEventHandler;
 
@@ -260,11 +290,12 @@ namespace ts.server {
                 ? eventHandler || (event => this.defaultEventHandler(event))
                 : undefined;
 
-            this.setImmediateOperationHandle = new ScheduledOperationHandle(handle => this.host.clearImmediate(handle), this);
-            this.setTimeoutOperationHandle = new ScheduledOperationHandle(handle => this.host.clearTimeout(handle), this);
-
             this.projectService = new ProjectService(host, logger, cancellationToken, useSingleInferredProject, typingsInstaller, this.eventHander);
             this.gcTimer = new GcTimer(host, /*delay*/ 7000, logger);
+        }
+
+        public getServerHost() {
+            return this.host;
         }
 
         public getCurrentRequestId() {
@@ -419,42 +450,39 @@ namespace ts.server {
             }, ms);
         }
 
-        private updateErrorCheck(checkList: PendingErrorCheck[], seq: number,
-            matchSeq: (seq: number) => boolean, ms = 1500, followMs = 200, requireOpen = true) {
+        private updateErrorCheck(checkList: PendingErrorCheck[], seq: number, matchSeq: (seq: number) => boolean, ms = 1500, followMs = 200, requireOpen = true) {
             if (followMs > ms) {
                 followMs = ms;
             }
-            if (this.errorTimer) {
-                this.host.clearTimeout(this.errorTimer);
+
+            if (this.inFlightErrorCheck) {
+                // mark current in flight operation as completed
+                this.inFlightErrorCheck.complete();
             }
-            if (this.immediateId) {
-                this.host.clearImmediate(this.immediateId);
-                this.immediateId = undefined;
-            }
-            let index = 0;
-            const checkOne = () => {
-                if (matchSeq(seq)) {
-                    const checkSpec = checkList[index];
-                    index++;
-                    if (checkSpec.project.containsFile(checkSpec.fileName, requireOpen)) {
-                        this.syntacticCheck(checkSpec.fileName, checkSpec.project);
-                        this.immediateId = this.host.setImmediate(() => {
-                            this.semanticCheck(checkSpec.fileName, checkSpec.project);
-                            this.immediateId = undefined;
-                            if (checkList.length > index) {
-                                this.errorTimer = this.host.setTimeout(checkOne, followMs);
-                            }
-                            else {
-                                this.errorTimer = undefined;
-                            }
-                        });
+            const inFlightErrorCheck = new InFlightOperation(this, this.currentRequestId);
+            this.inFlightErrorCheck = inFlightErrorCheck;
+
+            this.inFlightErrorCheck.executeAction(() => {
+                let index = 0;
+                const checkOne = () => {
+                    if (matchSeq(seq)) {
+                        const checkSpec = checkList[index];
+                        index++;
+                        if (checkSpec.project.containsFile(checkSpec.fileName, requireOpen)) {
+                            this.syntacticCheck(checkSpec.fileName, checkSpec.project);
+                            inFlightErrorCheck.immediate(() => {
+                                this.semanticCheck(checkSpec.fileName, checkSpec.project);
+                                if (checkList.length > index) {
+                                    inFlightErrorCheck.delay(followMs, checkOne);
+                                }
+                            });
+                        }
                     }
+                };
+                if ((checkList.length > index) && (matchSeq(seq))) {
+                    inFlightErrorCheck.delay(ms, checkOne);
                 }
-            };
-            if ((checkList.length > index) && (matchSeq(seq))) {
-                this.setTimeoutOperationHandle.attach(this.host.setTimeout(checkOne, ms))
-                this.errorTimer = this.host.setTimeout(checkOne, ms);
-            }
+            });
         }
 
         private cleanProjects(caption: string, projects: Project[]) {
