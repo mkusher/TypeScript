@@ -2221,7 +2221,7 @@ namespace ts {
             classPrototype.parent = leftSideOfAssignment;
 
             let funcSymbol = container.locals.get(constructorFunction.text);
-            if (isDeclarationOfFunctionOrClassExpression(funcSymbol)) {
+            if (funcSymbol && isDeclarationOfFunctionOrClassExpression(funcSymbol)) {
                 funcSymbol = (funcSymbol.valueDeclaration as VariableDeclaration).initializer.symbol;
             }
 
@@ -2251,7 +2251,7 @@ namespace ts {
             target.parent = leftSideOfAssignment;
 
             let funcSymbol = container.locals.get(target.text);
-            if (isDeclarationOfFunctionOrClassExpression(funcSymbol)) {
+            if (funcSymbol && isDeclarationOfFunctionOrClassExpression(funcSymbol)) {
                 funcSymbol = (funcSymbol.valueDeclaration as VariableDeclaration).initializer.symbol;
             }
 

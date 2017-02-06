@@ -2200,6 +2200,8 @@
         /* @internal */ moduleAugmentations: LiteralExpression[];
         /* @internal */ patternAmbientModules?: PatternAmbientModule[];
         /* @internal */ ambientModuleNames: string[];
+        /* @internal */ hasCheckDirective: boolean;
+        /* @internal */ hasTypesDirective: boolean;
     }
 
     export interface Bundle extends Node {
@@ -3199,9 +3201,11 @@
         allowSyntheticDefaultImports?: boolean;
         allowUnreachableCode?: boolean;
         allowUnusedLabels?: boolean;
+        allowTypesInJsFiles?: boolean;
         alwaysStrict?: boolean;
         baseUrl?: string;
         charset?: string;
+        checkJsFiles?: boolean;
         /* @internal */ configFilePath?: string;
         declaration?: boolean;
         declarationDir?: string;

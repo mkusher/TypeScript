@@ -459,7 +459,18 @@ namespace ts {
             name: "alwaysStrict",
             type: "boolean",
             description: Diagnostics.Parse_in_strict_mode_and_emit_use_strict_for_each_source_file
-        }
+        },
+        {
+            name: "checkJsFiles",
+            type: "boolean",
+            experimental: true,
+            description: Diagnostics.Show_errors_in_a_js_file
+        },
+        {
+            name: "allowTypesInJsFiles",
+            type: "boolean",
+            experimental: true
+       }
     ];
 
     /* @internal */

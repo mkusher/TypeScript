@@ -3302,5 +3302,9 @@
     "Octal literals are not allowed in enums members initializer. Use the syntax '{0}'.": {
         "category": "Error",
         "code": 8018
+    },
+    "Show errors in a .js file.": {
+        "category": "Message",
+        "code": 8019
     }
 }
