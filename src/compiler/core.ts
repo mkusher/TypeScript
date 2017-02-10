@@ -2011,13 +2011,34 @@ namespace ts {
         }
     }
 
+    export interface SupportedExtensions {
+        ts: string[];
+        dts: string[];
+        js: string[];
+    }
+
     /**
      *  List of supported extensions in order of file resolution precedence.
      */
-    export const supportedTypeScriptExtensions = [".ts", ".tsx", ".d.ts"];
-    /** Must have ".d.ts" first because if ".ts" goes first, that will be detected as the extension instead of ".d.ts". */
-    export const supportedTypescriptExtensionsForExtractExtension = [".d.ts", ".ts", ".tsx"];
+
+    const tsExtensions = [".ts", ".tsx"];
+    const dtsExtensions = [".d.ts"]; 
+
     export const supportedJavascriptExtensions = [".js", ".jsx"];
+    export const supportedTypeScriptExtensions = tsExtensions.concat(dtsExtensions);
+    /** Must have ".d.ts" first because if ".ts" goes first, that will be detected as the extension instead of ".d.ts". */
+    export const supportedTypescriptExtensionsForExtractExtension = dtsExtensions.concat(tsExtensions);
+
+    const tsOnlyExtensions: SupportedExtensions = { ts: tsExtensions, dts: dtsExtensions, js: [] };
+    const tsJsExtensions: SupportedExtensions = { ts: tsExtensions, dts: dtsExtensions, js: supportedJavascriptExtensions };
+
+    export function getSupportedExtensionsObject(options?: CompilerOptions, extraFileExtensions?: FileExtensionInfo[]): SupportedExtensions {
+        const needAllExtensions = options && options.allowJs;
+        if (!extraFileExtensions || extraFileExtensions.length === 0) {
+            return needAllExtensions ? tsJsExtensions : tsOnlyExtensions;
+        }
+    }
+
     const allSupportedExtensions = supportedTypeScriptExtensions.concat(supportedJavascriptExtensions);
 
     export function getSupportedExtensions(options?: CompilerOptions, extraFileExtensions?: FileExtensionInfo[]): string[] {
@@ -2061,10 +2082,7 @@ namespace ts {
     export const enum ExtensionPriority {
         TypeScriptFiles = 0,
         DeclarationAndJavaScriptFiles = 2,
-        Limit = 5,
-
         Highest = TypeScriptFiles,
-        Lowest = DeclarationAndJavaScriptFiles,
     }
 
     export function getExtensionPriority(path: string, supportedExtensions: string[]): ExtensionPriority {
