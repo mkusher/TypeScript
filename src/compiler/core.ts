@@ -2011,6 +2011,9 @@ namespace ts {
         }
     }
 
+    /**
+     * Stores list of supported extensions and index that separates .ts extensions from .d.ts and .js.
+     */
     export interface SupportedExtensions {
         readonly dtsAndJsIndex: number;
         readonly extensions: string[];
@@ -2019,7 +2022,6 @@ namespace ts {
     /**
      *  List of supported extensions in order of file resolution precedence.
      */
-
     const tsExtensions = [".ts", ".tsx"];
     const dtsExtensions = [".d.ts"];
 
@@ -2038,10 +2040,12 @@ namespace ts {
     const tsOnlyExtensions: SupportedExtensions = toSupportedExtensions(tsExtensions, dtsExtensions, /*js*/[]);
     const tsJsExtensions: SupportedExtensions = toSupportedExtensions(tsExtensions, dtsExtensions, supportedJavascriptExtensions);
 
+    /* @internal */
     export function getSupportedExtensionsObject(options?: CompilerOptions, extraFileExtensions?: FileExtensionInfo[]): SupportedExtensions {
         const needAllExtensions = options && options.allowJs;
+        // use separate lists for ts and js extensions
+        // extraFileExtensions can add more entries into both lists and we need to maintain proper order (ts extensions should come before js)
         let ts = tsExtensions;
-        const dts = dtsExtensions;
         let js = supportedJavascriptExtensions;
 
         if (extraFileExtensions) {
@@ -2061,22 +2065,24 @@ namespace ts {
                 }
             }
         }
+        // return precomputed objects if extraFileExtensions have not brought new entries.
         if (needAllExtensions) {
-            if (ts === tsExtensions && dts === dtsExtensions && js === supportedJavascriptExtensions) {
+            if (ts === tsExtensions && js === supportedJavascriptExtensions) {
                 return tsJsExtensions;
             }
         }
         else {
-            if (ts === tsExtensions && dts === dtsExtensions) {
+            if (ts === tsExtensions) {
                 return tsOnlyExtensions;
             }
         }
 
-        return toSupportedExtensions(ts, dts, js);
+        return toSupportedExtensions(ts, dtsExtensions, js);
 
         function tryAddExtension(extension: string, container: string[], originalList: string[]): string[] {
             if (container.indexOf(extension) === -1) {
                 if (container === originalList) {
+                    // copy original list on first write
                     container = originalList.slice(0);
                 }
                 container.push(extension);
