@@ -1598,17 +1598,13 @@ namespace ts.projectSystem {
                 path: "/a/main.js",
                 content: "var y = 1"
             };
-            const f3 = {
-                path: "/a/view.html",
-                content: ""
-            };
             const config = {
                 path: "/a/tsconfig.json",
                 content: JSON.stringify({
                     compilerOptions: { allowJs: true }
                 })
             };
-            const host = createServerHost([f1, f2, f3, config]);
+            const host = createServerHost([f1, f2, config]);
             const projectService = createProjectService(host);
             projectService.setHostConfiguration({
                 extraFileExtensions: [
@@ -1619,13 +1615,13 @@ namespace ts.projectSystem {
             });
             projectService.openClientFile(f1.path);
             projectService.checkNumberOfProjects({ configuredProjects: 1 });
-            checkProjectActualFiles(projectService.configuredProjects[0], [ f1.path, f3.path ]);
+            checkProjectActualFiles(projectService.configuredProjects[0], [ f1.path ]);
 
             projectService.closeClientFile(f1.path);
 
             projectService.openClientFile(f2.path);
             projectService.checkNumberOfProjects({ configuredProjects: 1, inferredProjects: 1 });
-            checkProjectActualFiles(projectService.configuredProjects[0], [ f1.path, f3.path ]);
+            checkProjectActualFiles(projectService.configuredProjects[0], [ f1.path ]);
             checkProjectActualFiles(projectService.inferredProjects[0], [ f2.path ]);
         });
 
