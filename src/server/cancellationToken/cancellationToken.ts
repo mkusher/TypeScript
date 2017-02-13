@@ -2,7 +2,6 @@
 
 import fs = require("fs");
 
-// TODO: remove after extrating services types into separate .d.ts file
 interface ServerCancellationToken {
     isCancellationRequested(): boolean;
     setRequest(requestId: number): void;
