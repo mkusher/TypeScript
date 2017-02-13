@@ -204,15 +204,32 @@ namespace ts.server {
         return `Content-Length: ${1 + len}\r\n\r\n${json}${newLine}`;
     }
 
-    class DelayedOperation {
+    interface NextStep {
+        immediate(action: () => void): void;
+        delay(ms: number, action: () => void): void;
+    }
+
+    class MultistepOperation {
+        private requestId: number;
         private timerHandle: any;
         private immediateId: any;
         private completed = false;
+        private readonly next: NextStep;
 
-        constructor(private readonly session: Session, private readonly requestId: number) {
+        constructor(private readonly session: Session) {
+            this.next = {
+                immediate: action => this.immediate(action),
+                delay: (ms, action) => this.delay(ms, action)
+            }
         }
 
-        public complete() {``
+        public startNew(action: (next: NextStep) => void) {
+            this.complete();
+            this.requestId = this.session.getCurrentRequestId();
+            this.executeAction(action);
+        }
+
+        private complete() {
             if (!this.completed) {
                 if (this.requestId) {
                     this.session.sendRequestCompletedEvent(this.requestId);
@@ -223,26 +240,28 @@ namespace ts.server {
             this.setImmediateId(undefined);
         }
 
-        public immediate(action: () => void) {
-            Debug.assert(this.requestId === this.session.getCurrentRequestId(), "immediate: incorrect request id")
+        private immediate(action: () => void) {
+            const requestId = this.requestId;
+            Debug.assert(requestId === this.session.getCurrentRequestId(), "immediate: incorrect request id")
             this.setImmediateId(this.session.getServerHost().setImmediate(() => {
                 this.immediateId = undefined;
-                this.session.executeWithRequestId(this.requestId, () => this.executeAction(action));
+                this.session.executeWithRequestId(requestId, () => this.executeAction(action));
             }));
         }
 
-        public delay(timeout: number, action: () => void) {
-            Debug.assert(this.requestId === this.session.getCurrentRequestId(), "delay: incorrect request id")
+        private delay(ms: number, action: () => void) {
+            const requestId = this.requestId;
+            Debug.assert(requestId === this.session.getCurrentRequestId(), "delay: incorrect request id")
             this.setTimerHandle(this.session.getServerHost().setTimeout(() => {
                 this.timerHandle = undefined;
-                this.session.executeWithRequestId(this.requestId, () => this.executeAction(action));
-            }, timeout));
+                this.session.executeWithRequestId(requestId, () => this.executeAction(action));
+            }, ms));
         }
 
-        public executeAction(action: () => void) {
+        private executeAction(action: (next: NextStep) => void) {
             let stop = false;
             try {
-                action();
+                action(this.next);
             }
             catch (e) {
                 stop = true;
@@ -281,7 +300,7 @@ namespace ts.server {
         private changeSeq = 0;
 
         private currentRequestId: number;
-        private currentErrorCheck: DelayedOperation;
+        private errorCheck: MultistepOperation;
 
         private eventHander: ProjectServiceEventHandler;
 
@@ -300,6 +319,7 @@ namespace ts.server {
                 ? eventHandler || (event => this.defaultEventHandler(event))
                 : undefined;
 
+            this.errorCheck = new MultistepOperation(this);
             this.projectService = new ProjectService(host, logger, cancellationToken, useSingleInferredProject, typingsInstaller, this.eventHander);
             this.gcTimer = new GcTimer(host, /*delay*/ 7000, logger);
         }
@@ -327,7 +347,7 @@ namespace ts.server {
                 case ContextEvent:
                     const { project, fileName } = event.data;
                     this.projectService.logger.info(`got context event, updating diagnostics for ${fileName}`);
-                    this.updateErrorCheck([{ fileName, project }], this.changeSeq, (n) => n === this.changeSeq, 100);
+                    this.errorCheck.startNew(next => this.updateErrorCheck(next, [{ fileName, project }], this.changeSeq, (n) => n === this.changeSeq, 100));
                     break;
                 case ConfigFileDiagEvent:
                     const { triggerFile, configFileName, diagnostics } = event.data;
@@ -442,39 +462,31 @@ namespace ts.server {
             }, ms);
         }
 
-        private updateErrorCheck(checkList: PendingErrorCheck[], seq: number, matchSeq: (seq: number) => boolean, ms = 1500, followMs = 200, requireOpen = true) {
+        private updateErrorCheck(next: NextStep, checkList: PendingErrorCheck[], seq: number, matchSeq: (seq: number) => boolean, ms = 1500, followMs = 200, requireOpen = true) {
             if (followMs > ms) {
                 followMs = ms;
             }
 
-            if (this.currentErrorCheck) {
-                // mark current in flight operation as completed
-                this.currentErrorCheck.complete();
-            }
-            const errorCheck = new DelayedOperation(this, this.currentRequestId);
-            this.currentErrorCheck = errorCheck;
-
-            this.currentErrorCheck.executeAction(() => {
-                let index = 0;
-                const checkOne = () => {
-                    if (matchSeq(seq)) {
-                        const checkSpec = checkList[index];
-                        index++;
-                        if (checkSpec.project.containsFile(checkSpec.fileName, requireOpen)) {
-                            this.syntacticCheck(checkSpec.fileName, checkSpec.project);
-                            errorCheck.immediate(() => {
-                                this.semanticCheck(checkSpec.fileName, checkSpec.project);
-                                if (checkList.length > index) {
-                                    errorCheck.delay(followMs, checkOne);
-                                }
-                            });
-                        }
+            let index = 0;
+            const checkOne = () => {
+                if (matchSeq(seq)) {
+                    const checkSpec = checkList[index];
+                    index++;
+                    if (checkSpec.project.containsFile(checkSpec.fileName, requireOpen)) {
+                        this.syntacticCheck(checkSpec.fileName, checkSpec.project);
+                        next.immediate(() => {
+                            this.semanticCheck(checkSpec.fileName, checkSpec.project);
+                            if (checkList.length > index) {
+                                next.delay(followMs, checkOne);
+                            }
+                        });
                     }
-                };
-                if ((checkList.length > index) && (matchSeq(seq))) {
-                    errorCheck.delay(ms, checkOne);
                 }
-            });
+            };
+
+            if ((checkList.length > index) && (matchSeq(seq))) {
+                next.delay(ms, checkOne);
+            }
         }
 
         private cleanProjects(caption: string, projects: Project[]) {
@@ -1187,7 +1199,7 @@ namespace ts.server {
         /**
          * @returns true if request to produce diagnostics was enqueued, otherwise false
          */
-        private getDiagnostics(delay: number, fileNames: string[]): boolean {
+        private getDiagnostics(next: NextStep, delay: number, fileNames: string[]): void {
             const checkList = fileNames.reduce((accum: PendingErrorCheck[], uncheckedFileName: string) => {
                 const fileName = toNormalizedPath(uncheckedFileName);
                 const project = this.projectService.getDefaultProjectForFile(fileName, /*refreshInferredProjects*/ true);
@@ -1198,10 +1210,8 @@ namespace ts.server {
             }, []);
 
             if (checkList.length > 0) {
-                this.updateErrorCheck(checkList, this.changeSeq, (n) => n === this.changeSeq, delay);
-                return true;
+                this.updateErrorCheck(next, checkList, this.changeSeq, (n) => n === this.changeSeq, delay);
             }
-            return false;
         }
 
         private change(args: protocol.ChangeRequestArgs) {
@@ -1437,10 +1447,10 @@ namespace ts.server {
                 : spans;
         }
 
-        getDiagnosticsForProject(delay: number, fileName: string): boolean {
+        private getDiagnosticsForProject(next: NextStep, delay: number, fileName: string): void {
             const { fileNames, languageServiceDisabled } = this.getProjectInfoWorker(fileName, /*projectFileName*/ undefined, /*needFileNameList*/ true);
             if (languageServiceDisabled) {
-                return false;
+                return;
             }
 
             // No need to analyze lib.d.ts
@@ -1475,10 +1485,8 @@ namespace ts.server {
                 const checkList = fileNamesInProject.map(fileName => ({ fileName, project }));
                 // Project level error analysis runs on background files too, therefore
                 // doesn't require the file to be opened
-                this.updateErrorCheck(checkList, this.changeSeq, (n) => n == this.changeSeq, delay, 200, /*requireOpen*/ false);
-                return true;
+                this.updateErrorCheck(next, checkList, this.changeSeq, (n) => n == this.changeSeq, delay, 200, /*requireOpen*/ false);
             }
-            return false;
         }
 
         getCanonicalFileName(fileName: string) {
@@ -1655,17 +1663,11 @@ namespace ts.server {
                 return this.requiredResponse(this.getSyntacticDiagnosticsSync(request.arguments));
             },
             [CommandNames.Geterr]: (request: protocol.GeterrRequest) => {
-                const ok = this.getDiagnostics(request.arguments.delay, request.arguments.files);
-                if (!ok) {
-                    this.sendRequestCompletedEvent(request.seq);
-                }
+                this.errorCheck.startNew(next => this.getDiagnostics(next, request.arguments.delay, request.arguments.files));
                 return this.notRequired();
             },
             [CommandNames.GeterrForProject]: (request: protocol.GeterrForProjectRequest) => {
-                const ok = this.getDiagnosticsForProject(request.arguments.delay, request.arguments.file);
-                if (!ok) {
-                    this.sendRequestCompletedEvent(request.seq);
-                }
+                this.errorCheck.startNew(next => this.getDiagnosticsForProject(next, request.arguments.delay, request.arguments.file));
                 return this.notRequired();
             },
             [CommandNames.Change]: (request: protocol.ChangeRequest) => {
