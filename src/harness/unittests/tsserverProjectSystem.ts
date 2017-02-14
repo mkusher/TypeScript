@@ -154,8 +154,25 @@ namespace ts.projectSystem {
     }
 
     class TestSession extends server.Session {
+        private seq = 0;
+
         getProjectService() {
             return this.projectService;
+        }
+
+        public getSeq() {
+            return this.seq;
+        }
+
+        public getNextSeq() {
+            return this.seq + 1;
+        }
+
+        public executeCommandSeq<T extends server.protocol.Request>(request: Partial<T>) {
+            this.seq++;
+            request.seq = this.seq;
+            request.type = "request";
+            return this.executeCommand(<T>request);
         }
     };
 
@@ -322,6 +339,8 @@ namespace ts.projectSystem {
 
     export class TestServerHost implements server.ServerHost {
         args: string[] = [];
+
+        private readonly output: string[] = [];
 
         private fs: ts.FileMap<FSEntry>;
         private getCanonicalFileName: (s: string) => string;
@@ -508,7 +527,17 @@ namespace ts.projectSystem {
             this.reloadFS(filesOrFolders);
         }
 
-        write() { }
+        write(message: string) {
+            this.output.push(message);
+        }
+
+        getOutput(): ReadonlyArray<string> {
+            return this.output;
+        }
+
+        clearOutput() {
+            this.output.length = 0;
+        }
 
         readonly readFile = (s: string) => (<File>this.fs.get(this.toPath(s))).content;
         readonly resolvePath = (s: string) => s;
@@ -3150,42 +3179,106 @@ namespace ts.projectSystem {
             }
             const session = createSession(host, /*typingsInstaller*/ undefined, /*projectServiceEventHandler*/ undefined, cancellationToken);
 
-            expectedRequestId = 1;
-            session.executeCommand(<server.protocol.OpenRequest>{
-                seq: 1,
-                type: "request",
+            expectedRequestId = session.getNextSeq();
+            session.executeCommandSeq(<server.protocol.OpenRequest>{
                 command: "open",
-                arguments: {
-                    file: f1.path
-                }
+                arguments: { file: f1.path }
             });
 
-            expectedRequestId = 2;
-            session.executeCommand(<server.protocol.GeterrRequest>{
-                seq: 2,
-                type: "request",
+            expectedRequestId = session.getNextSeq();
+            session.executeCommandSeq(<server.protocol.GeterrRequest>{
                 command: "geterr",
-                arguments: {
-                    files: [f1.path]
-                }
+                arguments: { files: [f1.path] }
             });
 
-            expectedRequestId = 3;
-            session.executeCommand(<server.protocol.OccurrencesRequest>{
-                seq: 3,
-                type: "request",
+            expectedRequestId = session.getNextSeq();
+            session.executeCommandSeq(<server.protocol.OccurrencesRequest>{
                 command: "occurrences",
-                arguments: {
-                    file: f1.path,
-                    line: 1,
-                    offset: 6
-                }
+                arguments: { file: f1.path, line: 1, offset: 6 }
             });
 
             expectedRequestId = 2;
             host.runQueuedImmediateCallbacks();
             expectedRequestId = 2;
             host.runQueuedImmediateCallbacks();
+        });
+
+        it("Geterr is cancellable", () => {
+            const f1 = {
+                path: "/a/app.ts",
+                content: "let x = 1"
+            };
+            const config = {
+                path: "/a/tsconfig.json",
+                content: JSON.stringify({
+                    compilerOptions: {}
+                })
+            };
+            
+            const cancellationRequests = createMap<boolean>();
+            const cancellationToken: server.ServerCancellationToken = (function(){
+                let currentId: number;
+                return <server.ServerCancellationToken>{
+                    setRequest(requestId) {
+                        currentId = requestId;
+                    },
+                    resetRequest(requestId) {
+                        assert.equal(requestId, currentId, "unexpected request id in cancellation")
+                        currentId = undefined;
+                    },
+                    isCancellationRequested() {
+                        return cancellationRequests.has(currentId.toString());
+                    }
+                }
+            })();
+            const host = createServerHost([f1, config]);
+            const session = createSession(host, /*typingsInstaller*/ undefined, () => {}, cancellationToken);
+
+            session.executeCommandSeq(<protocol.OpenRequest>{
+                command: "open",
+                arguments: { file: f1.path }
+            });
+            // send geterr for missing file
+            session.executeCommandSeq(<protocol.GeterrRequest>{
+                command: "geterr",
+                arguments: { files: ["/a/missing"] }
+            });
+            // no files - expect 'completed' event
+            assert.equal(host.getOutput().length, 1, "expect 1 message");
+            verifyRequestCompleted(session.getSeq());
+
+            // send geterr for a valid file
+            session.executeCommandSeq(<protocol.GeterrRequest>{
+                command: "geterr",
+                arguments: { files: [f1.path] }
+            });
+
+            assert.equal(host.getOutput().length, 0, "expect 0 messages");
+            const getErrId = session.getSeq();
+
+            // run new request
+            session.executeCommandSeq(<protocol.ProjectInfoRequest>{
+                command: "projectInfo",
+                arguments: { file: f1.path }
+            });
+            host.clearOutput();
+
+            // cancel previously issued Geterr
+            cancellationRequests.set(getErrId.toString(), true);
+
+            // give chance to finish
+            host.runQueuedTimeoutCallbacks();
+            host.runQueuedImmediateCallbacks();
+
+            assert.equal(host.getOutput().length, 1, "expect 1 message");
+            verifyRequestCompleted(getErrId);
+
+            function verifyRequestCompleted(expectedSeq: number) {
+                const event = <protocol.RequestCompletedEvent>JSON.parse(server.extractMessage(host.getOutput()[0]));
+                assert.equal(event.event, "requestCompleted");
+                assert.equal(event.body.request_seq, expectedSeq, "expectedSeq");
+                host.clearOutput();
+            }
         });
     });
 

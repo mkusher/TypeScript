@@ -213,7 +213,7 @@ namespace ts.server {
         private requestId: number;
         private timerHandle: any;
         private immediateId: any;
-        private completed = false;
+        private completed = true;
         private readonly next: NextStep;
 
         constructor(private readonly session: Session) {
@@ -226,6 +226,7 @@ namespace ts.server {
         public startNew(action: (next: NextStep) => void) {
             this.complete();
             this.requestId = this.session.getCurrentRequestId();
+            this.completed = false;
             this.executeAction(action);
         }
 
@@ -1197,9 +1198,6 @@ namespace ts.server {
             }
         }
 
-        /**
-         * @returns true if request to produce diagnostics was enqueued, otherwise false
-         */
         private getDiagnostics(next: NextStep, delay: number, fileNames: string[]): void {
             const checkList = fileNames.reduce((accum: PendingErrorCheck[], uncheckedFileName: string) => {
                 const fileName = toNormalizedPath(uncheckedFileName);
