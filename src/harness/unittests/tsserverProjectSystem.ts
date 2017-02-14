@@ -3214,8 +3214,8 @@ namespace ts.projectSystem {
                     compilerOptions: {}
                 })
             };
-            
-            const cancellationRequests = createMap<boolean>();
+
+            let requestToCancel = -1;
             const cancellationToken: server.ServerCancellationToken = (function(){
                 let currentId: number;
                 return <server.ServerCancellationToken>{
@@ -3227,57 +3227,107 @@ namespace ts.projectSystem {
                         currentId = undefined;
                     },
                     isCancellationRequested() {
-                        return cancellationRequests.has(currentId.toString());
+                        return requestToCancel === currentId;
                     }
                 }
             })();
             const host = createServerHost([f1, config]);
             const session = createSession(host, /*typingsInstaller*/ undefined, () => {}, cancellationToken);
+            {
+                session.executeCommandSeq(<protocol.OpenRequest>{
+                    command: "open",
+                    arguments: { file: f1.path }
+                });
+                // send geterr for missing file
+                session.executeCommandSeq(<protocol.GeterrRequest>{
+                    command: "geterr",
+                    arguments: { files: ["/a/missing"] }
+                });
+                // no files - expect 'completed' event
+                assert.equal(host.getOutput().length, 1, "expect 1 message");
+                verifyRequestCompleted(session.getSeq(), 0);
+            }
+            {
+                const getErrId = session.getNextSeq();
+                // send geterr for a valid file
+                session.executeCommandSeq(<protocol.GeterrRequest>{
+                    command: "geterr",
+                    arguments: { files: [f1.path] }
+                });
 
-            session.executeCommandSeq(<protocol.OpenRequest>{
-                command: "open",
-                arguments: { file: f1.path }
-            });
-            // send geterr for missing file
-            session.executeCommandSeq(<protocol.GeterrRequest>{
-                command: "geterr",
-                arguments: { files: ["/a/missing"] }
-            });
-            // no files - expect 'completed' event
-            assert.equal(host.getOutput().length, 1, "expect 1 message");
-            verifyRequestCompleted(session.getSeq());
+                assert.equal(host.getOutput().length, 0, "expect 0 messages");
 
-            // send geterr for a valid file
-            session.executeCommandSeq(<protocol.GeterrRequest>{
-                command: "geterr",
-                arguments: { files: [f1.path] }
-            });
+                // run new request
+                session.executeCommandSeq(<protocol.ProjectInfoRequest>{
+                    command: "projectInfo",
+                    arguments: { file: f1.path }
+                });
+                host.clearOutput();
 
-            assert.equal(host.getOutput().length, 0, "expect 0 messages");
-            const getErrId = session.getSeq();
+                // cancel previously issued Geterr
+                requestToCancel = getErrId;
+                host.runQueuedTimeoutCallbacks();
 
-            // run new request
-            session.executeCommandSeq(<protocol.ProjectInfoRequest>{
-                command: "projectInfo",
-                arguments: { file: f1.path }
-            });
-            host.clearOutput();
+                assert.equal(host.getOutput().length, 1, "expect 1 message");
+                verifyRequestCompleted(getErrId, 0);
 
-            // cancel previously issued Geterr
-            cancellationRequests.set(getErrId.toString(), true);
+                requestToCancel = -1;
+            }
+            {
+                const getErrId = session.getNextSeq();
+                session.executeCommandSeq(<protocol.GeterrRequest>{
+                    command: "geterr",
+                    arguments: { files: [f1.path] }
+                });
+                assert.equal(host.getOutput().length, 0, "expect 0 messages");
 
-            // give chance to finish
-            host.runQueuedTimeoutCallbacks();
-            host.runQueuedImmediateCallbacks();
+                // run first step
+                host.runQueuedTimeoutCallbacks();
+                assert.equal(host.getOutput().length, 1, "expect 1 messages");
+                const e1 = <protocol.Event>getMessage(0);
+                assert.equal(e1.event, "syntaxDiag");
+                host.clearOutput();
 
-            assert.equal(host.getOutput().length, 1, "expect 1 message");
-            verifyRequestCompleted(getErrId);
+                requestToCancel = getErrId;
+                host.runQueuedImmediateCallbacks();
+                assert.equal(host.getOutput().length, 1, "expect 1 message");
+                verifyRequestCompleted(getErrId, 0);
 
-            function verifyRequestCompleted(expectedSeq: number) {
-                const event = <protocol.RequestCompletedEvent>JSON.parse(server.extractMessage(host.getOutput()[0]));
+                requestToCancel = -1;
+            }
+            {
+                const getErrId = session.getNextSeq();
+                session.executeCommandSeq(<protocol.GeterrRequest>{
+                    command: "geterr",
+                    arguments: { files: [f1.path] }
+                });
+                assert.equal(host.getOutput().length, 0, "expect 0 messages");
+
+                // run first step
+                host.runQueuedTimeoutCallbacks();
+                assert.equal(host.getOutput().length, 1, "expect 1 messages");
+                const e1 = <protocol.Event>getMessage(0);
+                assert.equal(e1.event, "syntaxDiag");
+                host.clearOutput();
+
+                host.runQueuedImmediateCallbacks();
+                assert.equal(host.getOutput().length, 2, "expect 2 messages");
+                const e2 = <protocol.Event>getMessage(0);
+                assert.equal(e2.event, "semanticDiag");
+                verifyRequestCompleted(getErrId, 1);
+
+                requestToCancel = -1;
+            }
+
+            function verifyRequestCompleted(expectedSeq: number, n: number) {
+                const event = <protocol.RequestCompletedEvent>getMessage(n);
                 assert.equal(event.event, "requestCompleted");
                 assert.equal(event.body.request_seq, expectedSeq, "expectedSeq");
                 host.clearOutput();
+            }
+
+            function getMessage(n: number) {
+                return JSON.parse(server.extractMessage(host.getOutput()[n]));
             }
         });
     });

@@ -209,6 +209,15 @@ namespace ts.server {
         delay(ms: number, action: () => void): void;
     }
 
+    interface MultistepOperationHost {
+        getCurrentRequestId(): number;
+        sendRequestCompletedEvent(requestId: number): void;
+        getServerHost(): ServerHost;
+        isCancellationRequested():  boolean;
+        executeWithRequestId(requestId: number, action: () => void): void;
+        logError(error: Error, message: string): void;
+    }
+
     class MultistepOperation {
         private requestId: number;
         private timerHandle: any;
@@ -216,7 +225,7 @@ namespace ts.server {
         private completed = true;
         private readonly next: NextStep;
 
-        constructor(private readonly session: Session) {
+        constructor(private readonly operationHost: MultistepOperationHost) {
             this.next = {
                 immediate: action => this.immediate(action),
                 delay: (ms, action) => this.delay(ms, action)
@@ -225,7 +234,7 @@ namespace ts.server {
 
         public startNew(action: (next: NextStep) => void) {
             this.complete();
-            this.requestId = this.session.getCurrentRequestId();
+            this.requestId = this.operationHost.getCurrentRequestId();
             this.completed = false;
             this.executeAction(action);
         }
@@ -233,7 +242,7 @@ namespace ts.server {
         private complete() {
             if (!this.completed) {
                 if (this.requestId) {
-                    this.session.sendRequestCompletedEvent(this.requestId);
+                    this.operationHost.sendRequestCompletedEvent(this.requestId);
                 }
                 this.completed = true;
             }
@@ -243,32 +252,37 @@ namespace ts.server {
 
         private immediate(action: () => void) {
             const requestId = this.requestId;
-            Debug.assert(requestId === this.session.getCurrentRequestId(), "immediate: incorrect request id")
-            this.setImmediateId(this.session.getServerHost().setImmediate(() => {
+            Debug.assert(requestId === this.operationHost.getCurrentRequestId(), "immediate: incorrect request id")
+            this.setImmediateId(this.operationHost.getServerHost().setImmediate(() => {
                 this.immediateId = undefined;
-                this.session.executeWithRequestId(requestId, () => this.executeAction(action));
+                this.operationHost.executeWithRequestId(requestId, () => this.executeAction(action));
             }));
         }
 
         private delay(ms: number, action: () => void) {
             const requestId = this.requestId;
-            Debug.assert(requestId === this.session.getCurrentRequestId(), "delay: incorrect request id")
-            this.setTimerHandle(this.session.getServerHost().setTimeout(() => {
+            Debug.assert(requestId === this.operationHost.getCurrentRequestId(), "delay: incorrect request id")
+            this.setTimerHandle(this.operationHost.getServerHost().setTimeout(() => {
                 this.timerHandle = undefined;
-                this.session.executeWithRequestId(requestId, () => this.executeAction(action));
+                this.operationHost.executeWithRequestId(requestId, () => this.executeAction(action));
             }, ms));
         }
 
         private executeAction(action: (next: NextStep) => void) {
             let stop = false;
             try {
-                action(this.next);
+                if (this.operationHost.isCancellationRequested()) {
+                    stop = true;
+                }
+                else {
+                    action(this.next);
+                }
             }
             catch (e) {
                 stop = true;
                 // ignore cancellation request
                 if (!(e instanceof OperationCanceledException)) {
-                    this.session.logError(e, `delayed processing of request ${this.requestId}`);
+                    this.operationHost.logError(e, `delayed processing of request ${this.requestId}`);
                 }
             }
             if (stop || !this.hasPendingWork()) {
@@ -278,14 +292,14 @@ namespace ts.server {
 
         private setTimerHandle(timerHandle: any) {;
             if (this.timerHandle !== undefined) {
-                this.session.getServerHost().clearTimeout(this.timerHandle);
+                this.operationHost.getServerHost().clearTimeout(this.timerHandle);
             }
             this.timerHandle = timerHandle;
         }
 
         private setImmediateId(immediateId: number) {
             if (this.immediateId !== undefined) {
-                this.session.getServerHost().clearImmediate(this.immediateId);
+                this.operationHost.getServerHost().clearImmediate(this.immediateId);
             }
             this.immediateId = immediateId;
         }
@@ -320,20 +334,20 @@ namespace ts.server {
                 ? eventHandler || (event => this.defaultEventHandler(event))
                 : undefined;
 
-            this.errorCheck = new MultistepOperation(this);
+            const multistepOperationHost: MultistepOperationHost = {
+                executeWithRequestId: (requestId, action) => this.executeWithRequestId(requestId, action),
+                getCurrentRequestId: () => this.currentRequestId,
+                getServerHost: () => this.host,
+                logError: (err, cmd) => this.logError(err, cmd),
+                sendRequestCompletedEvent: requestId => this.sendRequestCompletedEvent(requestId),
+                isCancellationRequested: () => cancellationToken.isCancellationRequested()
+            }
+            this.errorCheck = new MultistepOperation(multistepOperationHost);
             this.projectService = new ProjectService(host, logger, cancellationToken, useSingleInferredProject, typingsInstaller, this.eventHander);
             this.gcTimer = new GcTimer(host, /*delay*/ 7000, logger);
         }
 
-        public getServerHost() {
-            return this.host;
-        }
-
-        public getCurrentRequestId() {
-            return this.currentRequestId;
-        }
-
-        public sendRequestCompletedEvent(requestId: number): void {
+        private sendRequestCompletedEvent(requestId: number): void {
             const event: protocol.RequestCompletedEvent = {
                 seq: 0,
                 type: "event",
