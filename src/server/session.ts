@@ -204,11 +204,17 @@ namespace ts.server {
         return `Content-Length: ${1 + len}\r\n\r\n${json}${newLine}`;
     }
 
+    /**
+     * Allows to schedule next step in multistep operation
+     */
     interface NextStep {
         immediate(action: () => void): void;
         delay(ms: number, action: () => void): void;
     }
 
+    /**
+     * External capabilities used by multistep operation
+     */
     interface MultistepOperationHost {
         getCurrentRequestId(): number;
         sendRequestCompletedEvent(requestId: number): void;
@@ -218,6 +224,10 @@ namespace ts.server {
         logError(error: Error, message: string): void;
     }
 
+    /**
+     * Represents operation that can schedule its next step to be executed later.
+     * Scheduling is done via instance of NextStep. If on current step subsequent step was not scheduled - operation is assumed to be completed. 
+     */
     class MultistepOperation {
         private requestId: number;
         private timerHandle: any;
