@@ -12,7 +12,7 @@ namespace ts.server {
 
     const childProcess: {
         fork(modulePath: string, args: string[], options?: { execArgv: string[], env?: MapLike<string> }): NodeChildProcess;
-        execFileSync(file: string, args: string[], options?: { stdio: "ignore" }): string | Buffer;
+        execFileSync(file: string, args: string[], options: { stdio: "ignore", env: MapLike<string> }): string | Buffer;
     } = require("child_process");
 
     const os: {
@@ -577,17 +577,29 @@ namespace ts.server {
         }
     }
 
-    function extractWatchDirectoryCacheKey(path: string) {
+    function extractWatchDirectoryCacheKey(path: string, currentDriveKey: string) {
         path = normalizeSlashes(path);
-        if (isRootedDiskPath(path)) {
-            return path.charAt(0);
-        }
         if (isUNCPath(path)) {
+            // UNC path: extract server name
             // //server/location
-            //   ^ <- start a this location
+            //         ^ <- from 0 to this position
             const firstSlash = path.indexOf(directorySeparator, 2);
-            return path.substring(2, firstSlash);
+            return path.substring(0, firstSlash).toLowerCase();
         }
+        const rootLength = getRootLength(path);
+        if (rootLength === 0) {
+            // relative path - assume file is on the current drive
+            return currentDriveKey;
+        }
+        if (path.charCodeAt(1) === CharacterCodes.colon && path.charCodeAt(2) === CharacterCodes.slash) {
+            // rooted path that starts with c:/... - extract drive letter
+            return path.charAt(0).toLowerCase();
+        }
+        if (path.charCodeAt(0) === CharacterCodes.slash && path.charCodeAt(1) !== CharacterCodes.slash) {
+            // rooted path that starts with slash - /somename - use key for current drive
+            return currentDriveKey;
+        }
+        // do not cache any other cases
         return undefined;
     }
 
@@ -595,34 +607,51 @@ namespace ts.server {
     // use watchGuard process on Windows when node version is 4 or later
     const useWatchGuard = process.platform === "win32" && parseInt(process.version.charAt(1)) >= 4;
     if (useWatchGuard) {
-        const currentDrive = extractWatchDirectoryCacheKey(sys.resolvePath(sys.getCurrentDirectory()));
+        const currentDrive = extractWatchDirectoryCacheKey(sys.resolvePath(sys.getCurrentDirectory()), /*currentDriveKey*/ undefined);
         const statusCache = createMap<boolean>();
         const originalWatchDirectory = sys.watchDirectory;
         sys.watchDirectory = function (path: string, callback: DirectoryWatcherCallback, recursive?: boolean): FileWatcher {
-            const cacheKey = extractWatchDirectoryCacheKey(path) || currentDrive;
-            let status = statusCache.get(cacheKey);
+            const cacheKey = extractWatchDirectoryCacheKey(path, currentDrive);
+            let status = cacheKey && statusCache.get(cacheKey);
             if (status === undefined) {
+                if (logger.hasLevel(LogLevel.verbose)) {
+                    logger.info(`${cacheKey} not found in cache...`);
+                }
                 try {
-                    childProcess.execFileSync(process.argv[0], [combinePaths(__dirname, "watchGuard.js"), `"${path}"`], { stdio: "ignore" });
+                    const args = [combinePaths(__dirname, "watchGuard.js"), path];
+                    if (logger.hasLevel(LogLevel.verbose)) {
+                        logger.info(`Starting ${process.execPath} with args ${JSON.stringify(args)}`);
+                    }
+                    childProcess.execFileSync(process.execPath, args, { stdio: "ignore", env: { "ELECTRON_RUN_AS_NODE": "1" } });
                     status = true;
+                    if (logger.hasLevel(LogLevel.verbose)) {
+                        logger.info(`WatchGuard for path ${path} returned: OK`);
+                    }
                 }
                 catch (e) {
                     status = false;
+                    if (logger.hasLevel(LogLevel.verbose)) {
+                        logger.info(`WatchGuard for path ${path} returned: ${e.message}`);
+                    }
+                }
+                if (cacheKey) {
+                    statusCache.set(cacheKey, status);
                 }
             }
             else if (logger.hasLevel(LogLevel.verbose)) {
                 logger.info(`watchDirectory for ${path} uses cached drive information.`);
             }
             if (status) {
-                // this drive is known to be safe to use - call real 'watchDirectory'
+                // this drive is safe to use - call real 'watchDirectory'
                 return originalWatchDirectory.call(sys, path, callback, recursive);
             }
             else {
-                // this drive is known to be unsafe - return no-op watcher
+                // this drive is unsafe - return no-op watcher
                 return { close() { } };
             }
         }
     }
+
     // Override sys.write because fs.writeSync is not reliable on Node 4
     sys.write = (s: string) => writeMessage(new Buffer(s, "utf8"));
     sys.watchFile = (fileName, callback) => {
