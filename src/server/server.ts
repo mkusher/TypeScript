@@ -59,7 +59,7 @@ namespace ts.server {
 
     interface NodeChildProcess {
         send(message: any, sendHandle?: any): void;
-        on(message: "message", f: (m: any) => void): void;
+        on(message: "message" | "exit", f: (m: any) => void): void;
         kill(): void;
         pid: number;
     }
@@ -577,7 +577,111 @@ namespace ts.server {
     }
 
     const sys = <ServerHost>ts.sys;
+    // use watchGuard process on Windows when node version is 4 or later
+    const useWatchGuard = process.platform === "win32" && parseInt(process.version.charAt(1)) >= 4;
+    if (useWatchGuard) {
+        interface DelayedWatcher extends FileWatcher {
+            readonly id: number;
+            readonly path: string;
+            readonly drive: string;
+            start(): void;
+        }
 
+        let watchGuard: NodeChildProcess;
+
+        let counter = 0;
+        // queue of watchDirectory requests
+        const pending: DelayedWatcher[] = [];
+        const cachedResultPerRootDrive = createMap<boolean>();
+
+        // kill watchGuard process when tsserver exits
+        process.on("exit", () => {
+            if (watchGuard) {
+                watchGuard.kill();
+                watchGuard = undefined;
+            }
+        });
+
+        spawnGuardIfNecessary();
+
+        const originalWatchDirectory = sys.watchDirectory;
+        sys.watchDirectory = function (path: string, callback: DirectoryWatcherCallback, recursive?: boolean): FileWatcher {
+            const drive = path.charCodeAt(1) === CharacterCodes.colon ? path.charAt(0) : undefined;
+            if (drive && cachedResultPerRootDrive.has(drive)) {
+                if (cachedResultPerRootDrive.get(drive)) {
+                    // this drive is known to be safe to use - call real 'watchDirectory'
+                    return originalWatchDirectory.call(sys, path, callback, recursive);;
+                }
+                else {
+                    // this drive is known to be unsafe - return no-op watcher
+                    return { close() {} };
+                }
+            }
+
+            let realWatcher: FileWatcher;
+            const id = counter++;
+            // setup a proxy watcher
+            const proxyWatcher = {
+                id,
+                path,
+                drive,
+                close() {
+                    if (realWatcher) {
+                        realWatcher.close();
+                    }
+                },
+                start() {
+                    realWatcher = originalWatchDirectory.call(sys, path, callback, recursive);
+                }
+            }
+            pending.push(proxyWatcher);
+            dequeueWatchRequestIfNecessary(/*force*/ false);
+            return proxyWatcher;
+        }
+
+        function dequeueWatchRequestIfNecessary(force: boolean) {
+            if (pending.length === 1 || force) {
+                // send requests to watchguard process one at a time
+                // if there are more than one requests in the queue - there are in-flight requests that were not finished yet.
+                spawnGuardIfNecessary().send(pending[0]);
+            }
+        }
+
+        function spawnGuardIfNecessary() {
+            if (!watchGuard) {
+                watchGuard = childProcess.fork(combinePaths(__dirname, "watchGuard.js"), [], { execArgv: [] });
+                watchGuard.on("exit", () => {
+                    watchGuard = undefined;
+                    // if watchGuard process exits and we have outstanding requests - assume that it failed processing the last request
+                    if (pending.length) {
+                        // remove last request from the queue
+                        const watcher = pending.shift();
+                        if (watcher.drive) {
+                            // mark drive as unsafe
+                            cachedResultPerRootDrive.set(watcher.drive, false);
+                        }
+                        // schedule next request (this will restart the server)
+                        dequeueWatchRequestIfNecessary(/*force*/ true);
+                    }
+                })
+                watchGuard.on("message", (msg: WatchDirectoryResponse) => {
+                    // remove last request from the queue
+                    const watcher = pending.shift();
+                    Debug.assert(watcher.id === msg.id);
+                    if (msg.ok) {
+                        // can start the actual watching
+                        watcher.start();
+                        if (watcher.drive) {
+                            cachedResultPerRootDrive.set(watcher.drive, true);
+                        }
+                    }
+                    // schedule next request
+                    dequeueWatchRequestIfNecessary(/*force*/ false);
+                });
+            }
+            return watchGuard;
+        }
+    }
     // Override sys.write because fs.writeSync is not reliable on Node 4
     sys.write = (s: string) => writeMessage(new Buffer(s, "utf8"));
     sys.watchFile = (fileName, callback) => {
