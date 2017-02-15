@@ -575,23 +575,21 @@ namespace ts.server {
             writeMessage(pending.shift());
         }
     }
-
     const sys = <ServerHost>ts.sys;
     // use watchGuard process on Windows when node version is 4 or later
     const useWatchGuard = process.platform === "win32" && parseInt(process.version.charAt(1)) >= 4;
     if (useWatchGuard) {
         interface DelayedWatcher extends FileWatcher {
-            readonly id: number;
             readonly path: string;
             readonly drive: string;
+            readonly startTime: number;
             start(): void;
         }
 
         let watchGuard: NodeChildProcess;
 
-        let counter = 0;
         // queue of watchDirectory requests
-        const pending: DelayedWatcher[] = [];
+        let pending: DelayedWatcher[] = [];
         const cachedResultPerRootDrive = createMap<boolean>();
 
         // kill watchGuard process when tsserver exits
@@ -608,23 +606,25 @@ namespace ts.server {
         sys.watchDirectory = function (path: string, callback: DirectoryWatcherCallback, recursive?: boolean): FileWatcher {
             const drive = path.charCodeAt(1) === CharacterCodes.colon ? path.charAt(0) : undefined;
             if (drive && cachedResultPerRootDrive.has(drive)) {
+                if (logger.hasLevel(LogLevel.verbose)) {
+                    logger.info(`watchDirectory for ${path} uses cached drive information.`);
+                }
                 if (cachedResultPerRootDrive.get(drive)) {
                     // this drive is known to be safe to use - call real 'watchDirectory'
-                    return originalWatchDirectory.call(sys, path, callback, recursive);;
+                    return originalWatchDirectory.call(sys, path, callback, recursive);
                 }
                 else {
                     // this drive is known to be unsafe - return no-op watcher
-                    return { close() {} };
+                    return { close() { } };
                 }
             }
 
             let realWatcher: FileWatcher;
-            const id = counter++;
             // setup a proxy watcher
             const proxyWatcher = {
-                id,
                 path,
                 drive,
+                startTime: Date.now(),
                 close() {
                     if (realWatcher) {
                         realWatcher.close();
@@ -640,10 +640,53 @@ namespace ts.server {
         }
 
         function dequeueWatchRequestIfNecessary(force: boolean) {
+            if (pending.length === 0) {
+                return;
+            }
             if (pending.length === 1 || force) {
                 // send requests to watchguard process one at a time
                 // if there are more than one requests in the queue - there are in-flight requests that were not finished yet.
-                spawnGuardIfNecessary().send(pending[0]);
+                // force is passed from function that process results so at this point we know for sure there are no other running requests
+                const w = pending[0];
+                spawnGuardIfNecessary().send(<WatchDirectoryRequest>{ directory: w.path });
+            }
+        }
+
+        function processResultForDrive(watcher: DelayedWatcher, driveSafeToUse: boolean) {
+            if (!watcher.drive) {
+                if (logger.hasLevel(LogLevel.verbose)) {
+                    logger.info(`WatchGuard: path ${watcher.drive}, safeToUse ${driveSafeToUse} finished in ${Date.now() - watcher.startTime}`);
+                }
+                return;
+            }
+            if (cachedResultPerRootDrive.has(watcher.drive)) {
+                return;
+            }
+            if (logger.hasLevel(LogLevel.verbose)) {
+                logger.info(`WatchGuard: path ${watcher.drive}, safeToUse ${driveSafeToUse} finished in ${Date.now() - watcher.startTime}`);
+            }
+            cachedResultPerRootDrive.set(watcher.drive, driveSafeToUse);
+            let newPending: typeof pending;
+            for (let i = 0; i < pending.length; i++) {
+                if (pending[i].drive === watcher.drive) {
+                    if (!newPending) {
+                        // copy old collection on first match
+                        newPending = pending.slice(0, i)
+                    }
+                    // if drive is safe to use - start the watcher directly without going through watch guard
+                    // otherwise just remove entry from pending requests
+                    if (driveSafeToUse) {
+                        pending[i].start();
+                    }
+                }
+                else {
+                    if (newPending) {
+                        newPending.push(pending[i]);
+                    }
+                }
+            }
+            if (newPending) {
+                pending = newPending;
             }
         }
 
@@ -656,10 +699,7 @@ namespace ts.server {
                     if (pending.length) {
                         // remove last request from the queue
                         const watcher = pending.shift();
-                        if (watcher.drive) {
-                            // mark drive as unsafe
-                            cachedResultPerRootDrive.set(watcher.drive, false);
-                        }
+                        processResultForDrive(watcher, /*driveSafeToUse*/ false);
                         // schedule next request (this will restart the server)
                         dequeueWatchRequestIfNecessary(/*force*/ true);
                     }
@@ -667,16 +707,14 @@ namespace ts.server {
                 watchGuard.on("message", (msg: WatchDirectoryResponse) => {
                     // remove last request from the queue
                     const watcher = pending.shift();
-                    Debug.assert(watcher.id === msg.id);
+                    Debug.assert(watcher.path === msg.directory);
                     if (msg.ok) {
-                        // can start the actual watching
+                        processResultForDrive(watcher, /*driveSafeToUse*/ true);
+                        // start the actual watching
                         watcher.start();
-                        if (watcher.drive) {
-                            cachedResultPerRootDrive.set(watcher.drive, true);
-                        }
                     }
                     // schedule next request
-                    dequeueWatchRequestIfNecessary(/*force*/ false);
+                    dequeueWatchRequestIfNecessary(/*force*/ true);
                 });
             }
             return watchGuard;
