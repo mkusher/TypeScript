@@ -330,6 +330,7 @@
         JsxOpeningElement,
         JsxClosingElement,
         JsxAttribute,
+        JsxAttributes,
         JsxSpreadAttribute,
         JsxExpression,
 
@@ -624,6 +625,7 @@
         kind: SyntaxKind.TypeParameter;
         name: Identifier;
         constraint?: TypeNode;
+        default?: TypeNode;
 
         // For error recovery purposes.
         expression?: Expression;
@@ -726,6 +728,7 @@
     // SyntaxKind.BindingElement
     // SyntaxKind.Property
     // SyntaxKind.PropertyAssignment
+    // SyntaxKind.JsxAttribute
     // SyntaxKind.ShorthandPropertyAssignment
     // SyntaxKind.EnumMember
     // SyntaxKind.JSDocPropertyTag
@@ -958,8 +961,7 @@
     }
 
     // Represents an expression that is elided as part of a transformation to emit comments on a
-    // not-emitted node. The 'expression' property of a NotEmittedExpression should be emitted.
-    // @internal
+    // not-emitted node. The 'expression' property of a PartiallyEmittedExpression should be emitted.
     export interface PartiallyEmittedExpression extends LeftHandSideExpression {
         kind: SyntaxKind.PartiallyEmittedExpression;
         expression: Expression;
@@ -1445,7 +1447,7 @@
         template: TemplateLiteral;
     }
 
-    export type CallLikeExpression = CallExpression | NewExpression | TaggedTemplateExpression | Decorator;
+    export type CallLikeExpression = CallExpression | NewExpression | TaggedTemplateExpression | Decorator | JsxOpeningLikeElement;
 
     export interface AsExpression extends Expression {
         kind: SyntaxKind.AsExpression;
@@ -1482,35 +1484,38 @@
         closingElement: JsxClosingElement;
     }
 
+    /// Either the opening tag in a <Tag>...</Tag> pair, or the lone <Tag /> in a self-closing form
+    export type JsxOpeningLikeElement = JsxSelfClosingElement | JsxOpeningElement;
+
+    export type JsxAttributeLike = JsxAttribute | JsxSpreadAttribute;
+
     export type JsxTagNameExpression = PrimaryExpression | PropertyAccessExpression;
+
+    export interface JsxAttributes extends ObjectLiteralExpressionBase<JsxAttributeLike> {
+    }
 
     /// The opening element of a <Tag>...</Tag> JsxElement
     export interface JsxOpeningElement extends Expression {
         kind: SyntaxKind.JsxOpeningElement;
         tagName: JsxTagNameExpression;
-        attributes: NodeArray<JsxAttribute | JsxSpreadAttribute>;
+        attributes: JsxAttributes;
     }
 
     /// A JSX expression of the form <TagName attrs />
     export interface JsxSelfClosingElement extends PrimaryExpression {
         kind: SyntaxKind.JsxSelfClosingElement;
         tagName: JsxTagNameExpression;
-        attributes: NodeArray<JsxAttribute | JsxSpreadAttribute>;
+        attributes: JsxAttributes;
     }
 
-    /// Either the opening tag in a <Tag>...</Tag> pair, or the lone <Tag /> in a self-closing form
-    export type JsxOpeningLikeElement = JsxSelfClosingElement | JsxOpeningElement;
-
-    export type JsxAttributeLike = JsxAttribute | JsxSpreadAttribute;
-
-    export interface JsxAttribute extends Node {
+    export interface JsxAttribute extends ObjectLiteralElement {
         kind: SyntaxKind.JsxAttribute;
         name: Identifier;
         /// JSX attribute initializers are optional; <X y /> is sugar for <X y={true} />
         initializer?: StringLiteral | JsxExpression;
     }
 
-    export interface JsxSpreadAttribute extends Node {
+    export interface JsxSpreadAttribute extends ObjectLiteralElement {
         kind: SyntaxKind.JsxSpreadAttribute;
         expression: Expression;
     }
@@ -1538,7 +1543,6 @@
 
     // Represents a statement that is elided as part of a transformation to emit comments on a
     // not-emitted node.
-    // @internal
     export interface NotEmittedStatement extends Statement {
         kind: SyntaxKind.NotEmittedStatement;
     }
@@ -1773,24 +1777,28 @@
         members: NodeArray<EnumMember>;
     }
 
-    export type ModuleBody = ModuleBlock | ModuleDeclaration;
-
     export type ModuleName = Identifier | StringLiteral;
+
+    export type ModuleBody = NamespaceBody | JSDocNamespaceBody;
 
     export interface ModuleDeclaration extends DeclarationStatement {
         kind: SyntaxKind.ModuleDeclaration;
         name: Identifier | StringLiteral;
-        body?: ModuleBlock | NamespaceDeclaration | JSDocNamespaceDeclaration | Identifier;
+        body?: ModuleBody | JSDocNamespaceDeclaration | Identifier;
     }
+
+    export type NamespaceBody = ModuleBlock | NamespaceDeclaration;
 
     export interface NamespaceDeclaration extends ModuleDeclaration {
         name: Identifier;
-        body: ModuleBlock | NamespaceDeclaration;
+        body: NamespaceBody;
     }
+
+    export type JSDocNamespaceBody = Identifier | JSDocNamespaceDeclaration;
 
     export interface JSDocNamespaceDeclaration extends ModuleDeclaration {
         name: Identifier;
-        body: JSDocNamespaceDeclaration | Identifier;
+        body: JSDocNamespaceBody;
     }
 
     export interface ModuleBlock extends Node, Statement {
@@ -2069,8 +2077,23 @@
         ArrayMutation  = 1 << 8,  // Potential array mutation
         Referenced     = 1 << 9,  // Referenced as antecedent once
         Shared         = 1 << 10, // Referenced as antecedent more than once
+        PreFinally     = 1 << 11, // Injected edge that links pre-finally label and pre-try flow
+        AfterFinally   = 1 << 12, // Injected edge that links post-finally flow with the rest of the graph
         Label = BranchLabel | LoopLabel,
         Condition = TrueCondition | FalseCondition
+    }
+
+    export interface FlowLock {
+        locked?: boolean;
+    }
+
+    export interface AfterFinallyFlow extends FlowNode, FlowLock {
+        antecedent: FlowNode;
+    }
+
+    export interface PreFinallyFlow extends FlowNode {
+        antecedent: FlowNode;
+        lock: FlowLock;
     }
 
     export interface FlowNode {
@@ -2405,7 +2428,7 @@
         /** Unlike `getExportsOfModule`, this includes properties of an `export =` value. */
         /* @internal */ getExportsAndPropertiesOfModule(moduleSymbol: Symbol): Symbol[];
 
-        getJsxElementAttributesType(elementNode: JsxOpeningLikeElement): Type;
+        getAllAttributesTypeFromJsxOpeningLikeElement(elementNode: JsxOpeningLikeElement): Type;
         getJsxIntrinsicTagNames(): Symbol[];
         isOptionalParameter(node: ParameterDeclaration): boolean;
         getAmbientModules(): Symbol[];
@@ -2459,6 +2482,7 @@
         // with import statements it previously saw (but chose not to emit).
         trackSymbol(symbol: Symbol, enclosingDeclaration?: Node, meaning?: SymbolFlags): void;
         reportInaccessibleThisError(): void;
+        reportIllegalExtends(): void;
     }
 
     export const enum TypeFormatFlags {
@@ -2474,7 +2498,8 @@
         InFirstTypeArgument             = 0x00000100,  // Writing first type argument of the instantiated type
         InTypeAlias                     = 0x00000200,  // Writing type in type alias declaration
         UseTypeAliasValue               = 0x00000400,  // Serialize the type instead of using type-alias. This is needed when we emit declaration file.
-        SuppressAnyReturnType            = 0x00000800,  // If the return type is any-like, don't offer a return type.
+        SuppressAnyReturnType           = 0x00000800,  // If the return type is any-like, don't offer a return type.
+        AddUndefined                    = 0x00001000,  // Add undefined to types of initialized, non-optional parameters
     }
 
     export const enum SymbolFormatFlags {
@@ -2579,6 +2604,7 @@
         isDeclarationVisible(node: Declaration): boolean;
         collectLinkedAliases(node: Identifier): Node[];
         isImplementationOfOverload(node: FunctionLikeDeclaration): boolean;
+        isRequiredInitializedParameter(node: ParameterDeclaration): boolean;
         writeTypeOfDeclaration(declaration: AccessorDeclaration | VariableLikeDeclaration, enclosingDeclaration: Node, flags: TypeFormatFlags, writer: SymbolWriter): void;
         writeReturnTypeOfSignatureDeclaration(signatureDeclaration: SignatureDeclaration, enclosingDeclaration: Node, flags: TypeFormatFlags, writer: SymbolWriter): void;
         writeTypeOfExpression(expr: Expression, enclosingDeclaration: Node, flags: TypeFormatFlags, writer: SymbolWriter): void;
@@ -2602,37 +2628,34 @@
 
     export const enum SymbolFlags {
         None                    = 0,
-        FunctionScopedVariable  = 0x00000001,  // Variable (var) or parameter
-        BlockScopedVariable     = 0x00000002,  // A block-scoped variable (let or const)
-        Property                = 0x00000004,  // Property or enum member
-        EnumMember              = 0x00000008,  // Enum member
-        Function                = 0x00000010,  // Function
-        Class                   = 0x00000020,  // Class
-        Interface               = 0x00000040,  // Interface
-        ConstEnum               = 0x00000080,  // Const enum
-        RegularEnum             = 0x00000100,  // Enum
-        ValueModule             = 0x00000200,  // Instantiated module
-        NamespaceModule         = 0x00000400,  // Uninstantiated module
-        TypeLiteral             = 0x00000800,  // Type Literal or mapped type
-        ObjectLiteral           = 0x00001000,  // Object Literal
-        Method                  = 0x00002000,  // Method
-        Constructor             = 0x00004000,  // Constructor
-        GetAccessor             = 0x00008000,  // Get accessor
-        SetAccessor             = 0x00010000,  // Set accessor
-        Signature               = 0x00020000,  // Call, construct, or index signature
-        TypeParameter           = 0x00040000,  // Type parameter
-        TypeAlias               = 0x00080000,  // Type alias
-        ExportValue             = 0x00100000,  // Exported value marker (see comment in declareModuleMember in binder)
-        ExportType              = 0x00200000,  // Exported type marker (see comment in declareModuleMember in binder)
-        ExportNamespace         = 0x00400000,  // Exported namespace marker (see comment in declareModuleMember in binder)
-        Alias                   = 0x00800000,  // An alias for another symbol (see comment in isAliasSymbolDeclaration in checker)
-        Instantiated            = 0x01000000,  // Instantiated symbol
-        Merged                  = 0x02000000,  // Merged symbol (created during program binding)
-        Transient               = 0x04000000,  // Transient symbol (created during type check)
-        Prototype               = 0x08000000,  // Prototype property (no source representation)
-        SyntheticProperty       = 0x10000000,  // Property in union or intersection type
-        Optional                = 0x20000000,  // Optional property
-        ExportStar              = 0x40000000,  // Export * declaration
+        FunctionScopedVariable  = 1 << 0,   // Variable (var) or parameter
+        BlockScopedVariable     = 1 << 1,   // A block-scoped variable (let or const)
+        Property                = 1 << 2,   // Property or enum member
+        EnumMember              = 1 << 3,   // Enum member
+        Function                = 1 << 4,   // Function
+        Class                   = 1 << 5,   // Class
+        Interface               = 1 << 6,   // Interface
+        ConstEnum               = 1 << 7,   // Const enum
+        RegularEnum             = 1 << 8,   // Enum
+        ValueModule             = 1 << 9,   // Instantiated module
+        NamespaceModule         = 1 << 10,  // Uninstantiated module
+        TypeLiteral             = 1 << 11,  // Type Literal or mapped type
+        ObjectLiteral           = 1 << 12,  // Object Literal
+        Method                  = 1 << 13,  // Method
+        Constructor             = 1 << 14,  // Constructor
+        GetAccessor             = 1 << 15,  // Get accessor
+        SetAccessor             = 1 << 16,  // Set accessor
+        Signature               = 1 << 17,  // Call, construct, or index signature
+        TypeParameter           = 1 << 18,  // Type parameter
+        TypeAlias               = 1 << 19,  // Type alias
+        ExportValue             = 1 << 20,  // Exported value marker (see comment in declareModuleMember in binder)
+        ExportType              = 1 << 21,  // Exported type marker (see comment in declareModuleMember in binder)
+        ExportNamespace         = 1 << 22,  // Exported namespace marker (see comment in declareModuleMember in binder)
+        Alias                   = 1 << 23,  // An alias for another symbol (see comment in isAliasSymbolDeclaration in checker)
+        Prototype               = 1 << 24,  // Prototype property (no source representation)
+        ExportStar              = 1 << 25,  // Export * declaration
+        Optional                = 1 << 26,  // Optional property
+        Transient               = 1 << 27,  // Transient symbol (created during type check)
 
         Enum = RegularEnum | ConstEnum,
         Variable = FunctionScopedVariable | BlockScopedVariable,
@@ -2692,11 +2715,9 @@
         name: string;                           // Name of symbol
         declarations?: Declaration[];           // Declarations associated with this symbol
         valueDeclaration?: Declaration;         // First value declaration of the symbol
-
         members?: SymbolTable;                  // Class, interface or literal instance members
         exports?: SymbolTable;                  // Module exports
         globalExports?: SymbolTable;            // Conditional global UMD exports
-        /* @internal */ isReadonly?: boolean;   // readonly? (set only for intersections and unions)
         /* @internal */ id?: number;            // Unique id (used to look up SymbolLinks)
         /* @internal */ mergeId?: number;       // Merge id (used to look up merged symbol)
         /* @internal */ parent?: Symbol;        // Parent symbol
@@ -2721,18 +2742,32 @@
         leftSpread?: Symbol;                // Left source for synthetic spread property
         rightSpread?: Symbol;               // Right source for synthetic spread property
         mappedTypeOrigin?: Symbol;          // For a property on a mapped type, points back to the orignal 'T' from 'keyof T'.
-        hasNonUniformType?: boolean;        // True if constituents have non-uniform types
-        isPartial?: boolean;                // True if syntheric property of union type occurs in some but not all constituents
         isDiscriminantProperty?: boolean;   // True if discriminant synthetic property
         resolvedExports?: SymbolTable;      // Resolved exports of module
         exportsChecked?: boolean;           // True if exports of external module have been checked
+        typeParametersChecked?: boolean;    // True if type parameters of merged class and interface declarations have been checked.
         isDeclarationWithCollidingName?: boolean;    // True if symbol is block scoped redeclaration
         bindingElement?: BindingElement;    // Binding element associated with property symbol
         exportsSomeValue?: boolean;         // True if module exports some value (not just types)
     }
 
     /* @internal */
-    export interface TransientSymbol extends Symbol, SymbolLinks { }
+    export const enum CheckFlags {
+        Instantiated      = 1 << 0,         // Instantiated symbol
+        SyntheticProperty = 1 << 1,         // Property in union or intersection type
+        Readonly          = 1 << 2,         // Readonly transient symbol
+        Partial           = 1 << 3,         // Synthetic property present in some but not all constituents
+        HasNonUniformType = 1 << 4,         // Synthetic property with non-uniform type in constituents
+        ContainsPublic    = 1 << 5,         // Synthetic property with public constituent(s)
+        ContainsProtected = 1 << 6,         // Synthetic property with protected constituent(s)
+        ContainsPrivate   = 1 << 7,         // Synthetic property with private constituent(s)
+        ContainsStatic    = 1 << 8,         // Synthetic property with static constituent(s)
+    }
+
+    /* @internal */
+    export interface TransientSymbol extends Symbol, SymbolLinks {
+        checkFlags: CheckFlags;
+    }
 
     export type SymbolTable = Map<Symbol>;
 
@@ -2787,7 +2822,7 @@
         isVisible?: boolean;              // Is this node visible
         hasReportedStatementInAmbientContext?: boolean;  // Cache boolean if we report statements in ambient context
         jsxFlags?: JsxFlags;              // flags for knowing what kind of element/attributes we're dealing with
-        resolvedJsxType?: Type;           // resolved element attributes type of a JSX openinglike element
+        resolvedJsxElementAttributesType?: Type;  // resolved element attributes type of a JSX openinglike element
         hasSuperCall?: boolean;           // recorded result when we try to find super-call. We only try to find one if this flag is undefined, indicating that we haven't made an attempt.
         superCall?: ExpressionStatement;  // Cached first super-call found in the constructor. Used in checking whether super is called before this-accessing
         switchTypes?: Type[];             // Cached array of switch case expression types
@@ -2823,6 +2858,8 @@
         /* @internal */
         ContainsAnyFunctionType = 1 << 23,  // Type is or contains object literal type
         NonPrimitive            = 1 << 24,  // intrinsic object type
+        /* @internal */
+        JsxAttributes           = 1 << 25,  // Jsx attributes type
 
         /* @internal */
         Nullable = Undefined | Null,
@@ -3012,7 +3049,7 @@
 
     /* @internal */
     // Object literals are initially marked fresh. Freshness disappears following an assignment,
-    // before a type assertion, or when when an object literal's type is widened. The regular
+    // before a type assertion, or when  an object literal's type is widened. The regular
     // version of a fresh type is identical except for the TypeFlags.FreshObjectLiteral flag.
     export interface FreshObjectLiteralType extends ResolvedType {
         regularType: ResolvedType;  // Regular version of fresh type
@@ -3035,12 +3072,15 @@
     // Type parameters (TypeFlags.TypeParameter)
     export interface TypeParameter extends TypeVariable {
         constraint: Type;        // Constraint
+        default?: Type;
         /* @internal */
         target?: TypeParameter;  // Instantiation target
         /* @internal */
         mapper?: TypeMapper;     // Instantiation mapper
         /* @internal */
         isThisType?: boolean;
+        /* @internal */
+        resolvedDefaultType?: Type;
     }
 
     // Indexed access types (TypeFlags.IndexedAccess)
@@ -3147,9 +3187,8 @@
         Property
     }
 
-    export interface FileExtensionInfo {
+    export interface JsFileExtensionInfo {
         extension: string;
-        scriptKind: ScriptKind;
         isMixedContent: boolean;
     }
 
@@ -3193,7 +3232,11 @@
         NodeJs   = 2
     }
 
-    export type CompilerOptionsValue = string | number | boolean | (string | number)[] | string[] | MapLike<string[]>;
+    export interface PluginImport {
+        name: string
+    }
+
+    export type CompilerOptionsValue = string | number | boolean | (string | number)[] | string[] | MapLike<string[]> | PluginImport[];
 
     export interface CompilerOptions {
         allowJs?: boolean;
@@ -3250,6 +3293,7 @@
         outDir?: string;
         outFile?: string;
         paths?: MapLike<string[]>;
+        /*@internal*/ plugins?: PluginImport[];
         preserveConstEnums?: boolean;
         project?: string;
         /* @internal */ pretty?: DiagnosticStyle;
@@ -3333,7 +3377,8 @@
         JS = 1,
         JSX = 2,
         TS = 3,
-        TSX = 4
+        TSX = 4,
+        External = 5
     }
 
     export const enum ScriptTarget {
@@ -3408,7 +3453,7 @@
     /* @internal */
     export interface CommandLineOptionOfListType extends CommandLineOptionBase {
         type: "list";
-        element: CommandLineOptionOfCustomType | CommandLineOptionOfPrimitiveType;
+        element: CommandLineOptionOfCustomType | CommandLineOptionOfPrimitiveType | TsConfigOnlyOption;
     }
 
     /* @internal */
@@ -3736,7 +3781,6 @@
         helpers?: EmitHelper[];                 // Emit helpers for the node
     }
 
-    /* @internal */
     export const enum EmitFlags {
         SingleLine = 1 << 0,                     // The contents of this node should be emitted on a single line.
         AdviseOnEmitNode = 1 << 1,               // The printer should invoke the onEmitNode callback when printing this node.
@@ -3765,7 +3809,6 @@
         HasEndOfDeclarationMarker = 1 << 21,     // Declaration has an associated NotEmittedStatement to mark the end of the declaration
     }
 
-    /* @internal */
     export interface EmitHelper {
         readonly name: string;      // A unique name for this helper.
         readonly scoped: boolean;   // Indicates whether ther helper MUST be emitted in the current scope.
