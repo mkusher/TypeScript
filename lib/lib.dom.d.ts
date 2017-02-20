@@ -1,14 +1,14 @@
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -2761,7 +2761,7 @@ interface DocumentEventMap extends GlobalEventHandlersEventMap {
 
 interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEvent, ParentNode, DocumentOrShadowRoot {
     /**
-      * Sets or gets the URL for the current document. 
+      * Sets or gets the URL for the current document.
       */
     readonly URL: string;
     /**
@@ -2789,7 +2789,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     applets: HTMLCollectionOf<HTMLAppletElement>;
     /**
-      * Deprecated. Sets or retrieves a value that indicates the background color behind the object. 
+      * Deprecated. Sets or retrieves a value that indicates the background color behind the object.
       */
     bgColor: string;
     /**
@@ -2813,19 +2813,19 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     designMode: string;
     /**
-      * Sets or retrieves a value that indicates the reading order of the object. 
+      * Sets or retrieves a value that indicates the reading order of the object.
       */
     dir: string;
     /**
-      * Gets an object representing the document type declaration associated with the current document. 
+      * Gets an object representing the document type declaration associated with the current document.
       */
     readonly doctype: DocumentType;
     /**
-      * Gets a reference to the root node of the document. 
+      * Gets a reference to the root node of the document.
       */
     documentElement: HTMLElement;
     /**
-      * Sets or gets the security domain of the document. 
+      * Sets or gets the security domain of the document.
       */
     domain: string;
     /**
@@ -2849,7 +2849,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     images: HTMLCollectionOf<HTMLImageElement>;
     /**
-      * Gets the implementation object of the current document. 
+      * Gets the implementation object of the current document.
       */
     readonly implementation: DOMImplementation;
     /**
@@ -2857,11 +2857,11 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     readonly inputEncoding: string | null;
     /**
-      * Gets the date that the page was last modified, if the page supplies one. 
+      * Gets the date that the page was last modified, if the page supplies one.
       */
     readonly lastModified: string;
     /**
-      * Sets or gets the color of the document links. 
+      * Sets or gets the color of the document links.
       */
     linkColor: string;
     /**
@@ -2869,7 +2869,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     links: HTMLCollectionOf<HTMLAnchorElement | HTMLAreaElement>;
     /**
-      * Contains information about the current URL. 
+      * Contains information about the current URL.
       */
     readonly location: Location;
     msCSSOMElementFloatMetrics: boolean;
@@ -2894,19 +2894,19 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       * @param ev The event.
       */
     onbeforedeactivate: (this: Document, ev: UIEvent) => any;
-    /** 
-      * Fires when the object loses the input focus. 
+    /**
+      * Fires when the object loses the input focus.
       * @param ev The focus event.
       */
     onblur: (this: Document, ev: FocusEvent) => any;
     /**
-      * Occurs when playback is possible, but would require further buffering. 
+      * Occurs when playback is possible, but would require further buffering.
       * @param ev The event.
       */
     oncanplay: (this: Document, ev: Event) => any;
     oncanplaythrough: (this: Document, ev: Event) => any;
     /**
-      * Fires when the contents of the object or selection have changed. 
+      * Fires when the contents of the object or selection have changed.
       * @param ev The event.
       */
     onchange: (this: Document, ev: Event) => any;
@@ -2916,7 +2916,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onclick: (this: Document, ev: MouseEvent) => any;
     /**
-      * Fires when the user clicks the right mouse button in the client area, opening the context menu. 
+      * Fires when the user clicks the right mouse button in the client area, opening the context menu.
       * @param ev The mouse event.
       */
     oncontextmenu: (this: Document, ev: PointerEvent) => any;
@@ -2940,12 +2940,12 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       * @param ev The event.
       */
     ondragend: (this: Document, ev: DragEvent) => any;
-    /** 
+    /**
       * Fires on the target element when the user drags the object to a valid drop target.
       * @param ev The drag event.
       */
     ondragenter: (this: Document, ev: DragEvent) => any;
-    /** 
+    /**
       * Fires on the target object when the user moves the mouse out of a valid drop target during a drag operation.
       * @param ev The drag event.
       */
@@ -2956,23 +2956,23 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     ondragover: (this: Document, ev: DragEvent) => any;
     /**
-      * Fires on the source object when the user starts to drag a text selection or selected object. 
+      * Fires on the source object when the user starts to drag a text selection or selected object.
       * @param ev The event.
       */
     ondragstart: (this: Document, ev: DragEvent) => any;
     ondrop: (this: Document, ev: DragEvent) => any;
     /**
-      * Occurs when the duration attribute is updated. 
+      * Occurs when the duration attribute is updated.
       * @param ev The event.
       */
     ondurationchange: (this: Document, ev: Event) => any;
     /**
-      * Occurs when the media element is reset to its initial state. 
+      * Occurs when the media element is reset to its initial state.
       * @param ev The event.
       */
     onemptied: (this: Document, ev: Event) => any;
     /**
-      * Occurs when the end of playback is reached. 
+      * Occurs when the end of playback is reached.
       * @param ev The event
       */
     onended: (this: Document, ev: MediaStreamErrorEvent) => any;
@@ -2982,7 +2982,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onerror: (this: Document, ev: ErrorEvent) => any;
     /**
-      * Fires when the object receives focus. 
+      * Fires when the object receives focus.
       * @param ev The event.
       */
     onfocus: (this: Document, ev: FocusEvent) => any;
@@ -3006,12 +3006,12 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onkeyup: (this: Document, ev: KeyboardEvent) => any;
     /**
-      * Fires immediately after the browser loads the object. 
+      * Fires immediately after the browser loads the object.
       * @param ev The event.
       */
     onload: (this: Document, ev: Event) => any;
     /**
-      * Occurs when media data is loaded at the current playback position. 
+      * Occurs when media data is loaded at the current playback position.
       * @param ev The event.
       */
     onloadeddata: (this: Document, ev: Event) => any;
@@ -3021,22 +3021,22 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onloadedmetadata: (this: Document, ev: Event) => any;
     /**
-      * Occurs when Internet Explorer begins looking for media data. 
+      * Occurs when Internet Explorer begins looking for media data.
       * @param ev The event.
       */
     onloadstart: (this: Document, ev: Event) => any;
     /**
-      * Fires when the user clicks the object with either mouse button. 
+      * Fires when the user clicks the object with either mouse button.
       * @param ev The mouse event.
       */
     onmousedown: (this: Document, ev: MouseEvent) => any;
     /**
-      * Fires when the user moves the mouse over the object. 
+      * Fires when the user moves the mouse over the object.
       * @param ev The mouse event.
       */
     onmousemove: (this: Document, ev: MouseEvent) => any;
     /**
-      * Fires when the user moves the mouse pointer outside the boundaries of the object. 
+      * Fires when the user moves the mouse pointer outside the boundaries of the object.
       * @param ev The mouse event.
       */
     onmouseout: (this: Document, ev: MouseEvent) => any;
@@ -3046,12 +3046,12 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onmouseover: (this: Document, ev: MouseEvent) => any;
     /**
-      * Fires when the user releases a mouse button while the mouse is over the object. 
+      * Fires when the user releases a mouse button while the mouse is over the object.
       * @param ev The mouse event.
       */
     onmouseup: (this: Document, ev: MouseEvent) => any;
     /**
-      * Fires when the wheel button is rotated. 
+      * Fires when the wheel button is rotated.
       * @param ev The mouse event
       */
     onmousewheel: (this: Document, ev: WheelEvent) => any;
@@ -3073,7 +3073,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
     onmspointerover: (this: Document, ev: MSPointerEvent) => any;
     onmspointerup: (this: Document, ev: MSPointerEvent) => any;
     /**
-      * Occurs when an item is removed from a Jump List of a webpage running in Site Mode. 
+      * Occurs when an item is removed from a Jump List of a webpage running in Site Mode.
       * @param ev The event.
       */
     onmssitemodejumplistitemremoved: (this: Document, ev: MSSiteModeEvent) => any;
@@ -3088,24 +3088,24 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onpause: (this: Document, ev: Event) => any;
     /**
-      * Occurs when the play method is requested. 
+      * Occurs when the play method is requested.
       * @param ev The event.
       */
     onplay: (this: Document, ev: Event) => any;
     /**
-      * Occurs when the audio or video has started playing. 
+      * Occurs when the audio or video has started playing.
       * @param ev The event.
       */
     onplaying: (this: Document, ev: Event) => any;
     onpointerlockchange: (this: Document, ev: Event) => any;
     onpointerlockerror: (this: Document, ev: Event) => any;
     /**
-      * Occurs to indicate progress while downloading media data. 
+      * Occurs to indicate progress while downloading media data.
       * @param ev The event.
       */
     onprogress: (this: Document, ev: ProgressEvent) => any;
     /**
-      * Occurs when the playback rate is increased or decreased. 
+      * Occurs when the playback rate is increased or decreased.
       * @param ev The event.
       */
     onratechange: (this: Document, ev: Event) => any;
@@ -3115,22 +3115,22 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onreadystatechange: (this: Document, ev: Event) => any;
     /**
-      * Fires when the user resets a form. 
+      * Fires when the user resets a form.
       * @param ev The event.
       */
     onreset: (this: Document, ev: Event) => any;
     /**
-      * Fires when the user repositions the scroll box in the scroll bar on the object. 
+      * Fires when the user repositions the scroll box in the scroll bar on the object.
       * @param ev The event.
       */
     onscroll: (this: Document, ev: UIEvent) => any;
     /**
-      * Occurs when the seek operation ends. 
+      * Occurs when the seek operation ends.
       * @param ev The event.
       */
     onseeked: (this: Document, ev: Event) => any;
     /**
-      * Occurs when the current playback position is moved. 
+      * Occurs when the current playback position is moved.
       * @param ev The event.
       */
     onseeking: (this: Document, ev: Event) => any;
@@ -3146,7 +3146,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
     onselectionchange: (this: Document, ev: Event) => any;
     onselectstart: (this: Document, ev: Event) => any;
     /**
-      * Occurs when the download has stopped. 
+      * Occurs when the download has stopped.
       * @param ev The event.
       */
     onstalled: (this: Document, ev: Event) => any;
@@ -3157,7 +3157,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
     onstop: (this: Document, ev: Event) => any;
     onsubmit: (this: Document, ev: Event) => any;
     /**
-      * Occurs if the load operation has been intentionally halted. 
+      * Occurs if the load operation has been intentionally halted.
       * @param ev The event.
       */
     onsuspend: (this: Document, ev: Event) => any;
@@ -3176,7 +3176,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     onvolumechange: (this: Document, ev: Event) => any;
     /**
-      * Occurs when playback stops because the next frame of a video resource is not available. 
+      * Occurs when playback stops because the next frame of a video resource is not available.
       * @param ev The event.
       */
     onwaiting: (this: Document, ev: Event) => any;
@@ -3210,7 +3210,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     title: string;
     readonly visibilityState: string;
-    /** 
+    /**
       * Sets or gets the color of the links that the user has visited.
       */
     vlinkColor: string;
@@ -3321,7 +3321,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
     createExpression(expression: string, resolver: XPathNSResolver): XPathExpression;
     createNSResolver(nodeResolver: Node): XPathNSResolver;
     /**
-      * Creates a NodeIterator object that you can use to traverse filtered lists of nodes or elements in a document. 
+      * Creates a NodeIterator object that you can use to traverse filtered lists of nodes or elements in a document.
       * @param root The root element or node to start traversing on.
       * @param whatToShow The type of nodes or elements to appear in the node list
       * @param filter A custom NodeFilter function to use. For more information, see filter. Use null for no filter.
@@ -3330,11 +3330,11 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
     createNodeIterator(root: Node, whatToShow?: number, filter?: NodeFilter, entityReferenceExpansion?: boolean): NodeIterator;
     createProcessingInstruction(target: string, data: string): ProcessingInstruction;
     /**
-      *  Returns an empty range object that has both of its boundary points positioned at the beginning of the document. 
+      *  Returns an empty range object that has both of its boundary points positioned at the beginning of the document.
       */
     createRange(): Range;
     /**
-      * Creates a text string from the specified value. 
+      * Creates a text string from the specified value.
       * @param data String that specifies the nodeValue property of the text node.
       */
     createTextNode(data: string): Text;
@@ -3349,7 +3349,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       */
     createTreeWalker(root: Node, whatToShow?: number, filter?: NodeFilter, entityReferenceExpansion?: boolean): TreeWalker;
     /**
-      * Returns the element for the specified x coordinate and the specified y coordinate. 
+      * Returns the element for the specified x coordinate and the specified y coordinate.
       * @param x The x-offset
       * @param y The y-offset
       */
@@ -3412,7 +3412,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
       * @param replace Specifies whether the existing entry for the document is replaced in the history list.
       */
     open(url?: string, name?: string, features?: string, replace?: boolean): Document;
-    /** 
+    /**
       * Returns a Boolean value that indicates whether a specified command can be successfully executed using execCommand, given the current state of the document.
       * @param commandId Specifies a command identifier.
       */
@@ -3434,7 +3434,7 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
     queryCommandSupported(commandId: string): boolean;
     /**
       * Retrieves the string associated with a command.
-      * @param commandId String that contains the identifier of a command. This can be any command identifier given in the list of Command Identifiers. 
+      * @param commandId String that contains the identifier of a command. This can be any command identifier given in the list of Command Identifiers.
       */
     queryCommandText(commandId: string): string;
     /**
@@ -3450,12 +3450,12 @@ interface Document extends Node, GlobalEventHandlers, NodeSelector, DocumentEven
     webkitCancelFullScreen(): void;
     webkitExitFullscreen(): void;
     /**
-      * Writes one or more HTML expressions to a document in the specified window. 
+      * Writes one or more HTML expressions to a document in the specified window.
       * @param content Specifies the text and HTML tags to write.
       */
     write(...content: string[]): void;
     /**
-      * Writes one or more HTML expressions, followed by a carriage return, to a document in the specified window. 
+      * Writes one or more HTML expressions, followed by a carriage return, to a document in the specified window.
       * @param content The text and HTML tags to write.
       */
     writeln(...content: string[]): void;
@@ -3716,7 +3716,7 @@ declare var Event: {
 }
 
 interface EventTarget {
-    addEventListener(type: string, listener?: EventListenerOrEventListenerObject, useCapture?: boolean): void;
+    addEventListener(type: string, listener?: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
     dispatchEvent(evt: Event): boolean;
     removeEventListener(type: string, listener?: EventListenerOrEventListenerObject, useCapture?: boolean): void;
 }
@@ -3956,12 +3956,12 @@ interface HTMLAnchorElement extends HTMLElement {
       */
     target: string;
     /**
-      * Retrieves or sets the text of the object as a string. 
+      * Retrieves or sets the text of the object as a string.
       */
     text: string;
     type: string;
     urn: string;
-    /** 
+    /**
       * Returns a string representation of an object.
       */
     toString(): string;
@@ -4067,7 +4067,7 @@ interface HTMLAreaElement extends HTMLElement {
       */
     host: string;
     /**
-      * Sets or retrieves the host name part of the location or URL. 
+      * Sets or retrieves the host name part of the location or URL.
       */
     hostname: string;
     /**
@@ -4103,7 +4103,7 @@ interface HTMLAreaElement extends HTMLElement {
       * Sets or retrieves the window or frame at which to target content.
       */
     target: string;
-    /** 
+    /**
       * Returns a string representation of an object.
       */
     toString(): string;
@@ -4273,7 +4273,7 @@ interface HTMLButtonElement extends HTMLElement {
       * Overrides the target attribute on a form element.
       */
     formTarget: string;
-    /** 
+    /**
       * Sets or retrieves the name of the object.
       */
     name: string;
@@ -4290,7 +4290,7 @@ interface HTMLButtonElement extends HTMLElement {
       * Returns a  ValidityState object that represents the validity states of an element.
       */
     readonly validity: ValidityState;
-    /** 
+    /**
       * Sets or retrieves the default or selected value of the control.
       */
     value: string;
@@ -4421,7 +4421,7 @@ declare var HTMLDirectoryElement: {
 
 interface HTMLDivElement extends HTMLElement {
     /**
-      * Sets or retrieves how the object is aligned with adjacent text. 
+      * Sets or retrieves how the object is aligned with adjacent text.
       */
     align: string;
     /**
@@ -5262,7 +5262,7 @@ interface HTMLInputElement extends HTMLElement {
       */
     readonly files: FileList | null;
     /**
-      * Retrieves a reference to the form that the object is embedded in. 
+      * Retrieves a reference to the form that the object is embedded in.
       */
     readonly form: HTMLFormElement;
     /**
@@ -5798,7 +5798,7 @@ interface HTMLMetaElement extends HTMLElement {
       */
     scheme: string;
     /**
-      * Sets or retrieves the URL property that will be loaded after the specified time has elapsed. 
+      * Sets or retrieves the URL property that will be loaded after the specified time has elapsed.
       */
     url: string;
     addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLMetaElement, ev: HTMLElementEventMap[K]) => any, useCapture?: boolean): void;
@@ -6091,7 +6091,7 @@ declare var HTMLOutputElement: {
 
 interface HTMLParagraphElement extends HTMLElement {
     /**
-      * Sets or retrieves how the object is aligned with adjacent text. 
+      * Sets or retrieves how the object is aligned with adjacent text.
       */
     align: string;
     clear: string;
@@ -6206,10 +6206,10 @@ interface HTMLScriptElement extends HTMLElement {
       */
     defer: boolean;
     /**
-      * Sets or retrieves the event for which the script is written. 
+      * Sets or retrieves the event for which the script is written.
       */
     event: string;
-    /** 
+    /**
       * Sets or retrieves the object that is bound to the event script.
       */
     htmlFor: string;
@@ -6218,7 +6218,7 @@ interface HTMLScriptElement extends HTMLElement {
       */
     src: string;
     /**
-      * Retrieves or sets the text of the object as a string. 
+      * Retrieves or sets the text of the object as a string.
       */
     text: string;
     /**
@@ -6242,7 +6242,7 @@ interface HTMLSelectElement extends HTMLElement {
     autofocus: boolean;
     disabled: boolean;
     /**
-      * Retrieves a reference to the form that the object is embedded in. 
+      * Retrieves a reference to the form that the object is embedded in.
       */
     readonly form: HTMLFormElement;
     /**
@@ -6268,7 +6268,7 @@ interface HTMLSelectElement extends HTMLElement {
     selectedIndex: number;
     selectedOptions: HTMLCollectionOf<HTMLOptionElement>;
     /**
-      * Sets or retrieves the number of rows in the list box. 
+      * Sets or retrieves the number of rows in the list box.
       */
     size: number;
     /**
@@ -6294,7 +6294,7 @@ interface HTMLSelectElement extends HTMLElement {
     /**
       * Adds an element to the areas, controlRange, or options collection.
       * @param element Variant of type Number that specifies the index position in the collection where the element is placed. If no value is given, the method places the element at the end of the collection.
-      * @param before Variant of type Object that specifies an element to insert before, or null to append the object to the collection. 
+      * @param before Variant of type Object that specifies an element to insert before, or null to append the object to the collection.
       */
     add(element: HTMLElement, before?: HTMLElement | number): void;
     /**
@@ -6502,7 +6502,7 @@ interface HTMLTableElement extends HTMLElement {
       */
     border: string;
     /**
-      * Sets or retrieves the border color of the object. 
+      * Sets or retrieves the border color of the object.
       */
     borderColor: any;
     /**
@@ -6818,7 +6818,7 @@ declare var HTMLTimeElement: {
 
 interface HTMLTitleElement extends HTMLElement {
     /**
-      * Retrieves or sets the text of the object as a string. 
+      * Retrieves or sets the text of the object as a string.
       */
     text: string;
     addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLTitleElement, ev: HTMLElementEventMap[K]) => any, useCapture?: boolean): void;
@@ -13283,8 +13283,8 @@ interface Window extends EventTarget, WindowTimers, WindowSessionStorage, Window
     scroll(options?: ScrollToOptions): void;
     scrollTo(options?: ScrollToOptions): void;
     scrollBy(options?: ScrollToOptions): void;
-    addEventListener<K extends keyof WindowEventMap>(type: K, listener: (this: Window, ev: WindowEventMap[K]) => any, useCapture?: boolean): void;
-    addEventListener(type: string, listener: EventListenerOrEventListenerObject, useCapture?: boolean): void;
+    addEventListener<K extends keyof WindowEventMap>(type: K, listener: (this: Window, ev: WindowEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
 }
 
 declare var Window: {
@@ -13913,6 +13913,12 @@ interface FilePropertyBag {
 
 interface EventListenerObject {
     handleEvent(evt: Event): void;
+}
+
+interface AddEventListenerOptions {
+    once?: boolean;
+    passive?: boolean;
+    capture?: boolean;
 }
 
 interface ProgressEventInit extends EventInit {
@@ -14891,8 +14897,8 @@ declare var indexedDB: IDBFactory;
 declare function atob(encodedString: string): string;
 declare function btoa(rawString: string): string;
 declare function fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
-declare function addEventListener<K extends keyof WindowEventMap>(type: K, listener: (this: Window, ev: WindowEventMap[K]) => any, useCapture?: boolean): void;
-declare function addEventListener(type: string, listener: EventListenerOrEventListenerObject, useCapture?: boolean): void;
+declare function addEventListener<K extends keyof WindowEventMap>(type: K, listener: (this: Window, ev: WindowEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
+declare function addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
 type AAGUID = string;
 type AlgorithmIdentifier = string | Algorithm;
 type BodyInit = any;
